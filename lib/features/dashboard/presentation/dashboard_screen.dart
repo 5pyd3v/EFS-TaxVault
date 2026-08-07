@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:fbr_taxvault/core/router/app_routes.dart';
-import 'package:fbr_taxvault/core/theme/app_semantic_colors.dart';
+import 'package:fbr_taxvault/core/theme/app_gradients.dart';
 import 'package:fbr_taxvault/core/theme/app_spacing.dart';
 import 'package:fbr_taxvault/features/auth/presentation/auth_providers.dart';
 import 'package:fbr_taxvault/features/dashboard/domain/dashboard_summary.dart';
@@ -11,10 +11,17 @@ import 'package:fbr_taxvault/features/dashboard/presentation/dashboard_providers
 import 'package:fbr_taxvault/features/vault/domain/invoice_summary.dart';
 import 'package:fbr_taxvault/shared/widgets/async_value_view.dart';
 import 'package:fbr_taxvault/shared/widgets/empty_state.dart';
+import 'package:fbr_taxvault/shared/widgets/hero_metric_card.dart';
+import 'package:fbr_taxvault/shared/widgets/icon_chip.dart';
 import 'package:fbr_taxvault/shared/widgets/section_header.dart';
 import 'package:fbr_taxvault/shared/widgets/stat_tile.dart';
 
-final _currencyFormat = NumberFormat.currency(locale: 'en_US', symbol: 'PKR ', decimalDigits: 0);
+final _currencyFormat = NumberFormat.currency(
+  locale: 'en_US',
+  symbol: 'Rs ',
+  decimalDigits: 0,
+);
+final _dateFormat = DateFormat('d MMM');
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -24,37 +31,74 @@ class DashboardScreen extends ConsumerWidget {
     final theme = Theme.of(context);
     final user = ref.watch(currentUserProvider);
     final summaryAsync = ref.watch(dashboardSummaryProvider);
+    final hour = DateTime.now().hour;
+    final greeting = hour < 12
+        ? 'Good morning'
+        : (hour < 17 ? 'Good afternoon' : 'Good evening');
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Home')),
-      body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(dashboardSummaryProvider),
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(AppSpacing.xxl),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Welcome back', style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              )),
-              const SizedBox(height: 2),
-              Text(user?.displayName ?? '', style: theme.textTheme.headlineSmall),
-              const SizedBox(height: AppSpacing.xxl),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () => context.go(AppRoutes.scan),
-                  icon: const Icon(Icons.document_scanner_outlined),
-                  label: const Text('Scan Invoice'),
+      body: SafeArea(
+        bottom: false,
+        child: RefreshIndicator(
+          onRefresh: () async => ref.invalidate(dashboardSummaryProvider),
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.xxl,
+                  AppSpacing.lg,
+                  AppSpacing.xxl,
+                  0,
+                ),
+                sliver: SliverToBoxAdapter(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            greeting,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            user?.displayName ?? '',
+                            style: theme.textTheme.headlineSmall,
+                          ),
+                        ],
+                      ),
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surface,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: theme.colorScheme.outline),
+                        ),
+                        child: Icon(
+                          Icons.notifications_outlined,
+                          size: 18,
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-              const SizedBox(height: AppSpacing.xxxl),
-              AsyncValueView<DashboardSummary>(
-                value: summaryAsync,
-                onRetry: () => ref.invalidate(dashboardSummaryProvider),
-                loading: (_) => const _StatsSkeleton(),
-                data: (summary) => _DashboardContent(summary: summary),
+              SliverPadding(
+                padding: const EdgeInsets.all(AppSpacing.xxl),
+                sliver: SliverToBoxAdapter(
+                  child: AsyncValueView<DashboardSummary>(
+                    value: summaryAsync,
+                    onRetry: () => ref.invalidate(dashboardSummaryProvider),
+                    loading: (_) => const _DashboardSkeleton(),
+                    data: (summary) => _DashboardContent(summary: summary),
+                  ),
+                ),
               ),
             ],
           ),
@@ -71,88 +115,69 @@ class _DashboardContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final semantic = theme.extension<AppSemanticColors>()!;
+    final filedRate = summary.totalInvoices == 0
+        ? 0
+        : (((summary.totalInvoices - summary.pendingVerification) /
+                      summary.totalInvoices) *
+                  100)
+              .round();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          padding: const EdgeInsets.all(AppSpacing.xl),
-          decoration: BoxDecoration(
-            border: Border.all(color: theme.colorScheme.outline),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: StatTile(
-                      label: 'Total invoices',
-                      value: '${summary.totalInvoices}',
-                      icon: Icons.receipt_long_outlined,
-                    ),
-                  ),
-                  Expanded(
-                    child: StatTile(
-                      label: 'This month',
-                      value: '${summary.currentMonthInvoices}',
-                      icon: Icons.calendar_today_outlined,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.xxl),
-              Row(
-                children: [
-                  Expanded(
-                    child: StatTile(
-                      label: 'Tax this month',
-                      value: _currencyFormat.format(summary.currentMonthTaxAmount),
-                      icon: Icons.account_balance_outlined,
-                    ),
-                  ),
-                  Expanded(
-                    child: StatTile(
-                      label: 'Pending verification',
-                      value: '${summary.pendingVerification}',
-                      icon: Icons.fact_check_outlined,
-                      valueColor: summary.pendingVerification > 0 ? semantic.warning : null,
-                    ),
-                  ),
-                ],
-              ),
-            ],
+        HeroMetricCard(
+          label: 'Tax exposure this month',
+          value: _currencyFormat.format(summary.currentMonthTaxAmount),
+          stats: [
+            HeroMetricStat(
+              label: 'Invoices',
+              value: '${summary.totalInvoices}',
+            ),
+            HeroMetricStat(
+              label: 'This month',
+              value: '${summary.currentMonthInvoices}',
+            ),
+            HeroMetricStat(label: 'Filed', value: '$filedRate%'),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: () => context.go(AppRoutes.scan),
+            icon: const Icon(Icons.document_scanner_outlined),
+            label: const Text('Scan invoice'),
           ),
         ),
-        if (summary.potentialIssues > 0) ...[
-          const SizedBox(height: AppSpacing.lg),
-          Container(
-            padding: const EdgeInsets.all(AppSpacing.lg),
-            decoration: BoxDecoration(
-              color: semantic.warningContainer,
-              borderRadius: BorderRadius.circular(12),
+        const SizedBox(height: AppSpacing.xxl),
+        Row(
+          children: [
+            Expanded(
+              child: StatTile(
+                label: 'Pending verification',
+                value: '${summary.pendingVerification}',
+                icon: Icons.fact_check_outlined,
+                gradient: AppGradients.amber,
+              ),
             ),
-            child: Row(
-              children: [
-                Icon(Icons.warning_amber_rounded, color: semantic.warning, size: 20),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: Text(
-                    '${summary.potentialIssues} invoice(s) need attention — please verify.',
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                ),
-              ],
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: StatTile(
+                label: 'Potential issues',
+                value: '${summary.potentialIssues}',
+                icon: Icons.error_outline_rounded,
+                gradient: AppGradients.coral,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
         const SizedBox(height: AppSpacing.xxxl),
         SectionHeader(
           title: 'Recent invoices',
           actionLabel: summary.totalInvoices == 0 ? null : 'See all',
-          onAction: summary.totalInvoices == 0 ? null : () => context.go(AppRoutes.vault),
+          onAction: summary.totalInvoices == 0
+              ? null
+              : () => context.go(AppRoutes.vault),
         ),
         const SizedBox(height: AppSpacing.lg),
         if (summary.totalInvoices == 0)
@@ -161,7 +186,8 @@ class _DashboardContent extends StatelessWidget {
             child: EmptyState(
               icon: Icons.inbox_outlined,
               title: 'No invoices yet',
-              message: 'Scan your first invoice and TaxVault will organize the rest.',
+              message:
+                  'Scan your first invoice and TaxVault will organize the rest.',
             ),
           )
         else
@@ -188,27 +214,47 @@ class _RecentInvoicesList extends ConsumerWidget {
             Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.sm),
               child: InkWell(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(16),
                 onTap: () => context.push(AppRoutes.invoiceReview(invoice.id)),
                 child: Container(
-                  padding: const EdgeInsets.all(AppSpacing.lg),
+                  padding: const EdgeInsets.all(AppSpacing.md),
                   decoration: BoxDecoration(
+                    color: theme.colorScheme.surface,
                     border: Border.all(color: theme.colorScheme.outline),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(16),
                   ),
                   child: Row(
                     children: [
+                      IconChip(
+                        icon: Icons.storefront_outlined,
+                        colorKey: invoice.supplierName,
+                      ),
+                      const SizedBox(width: AppSpacing.md),
                       Expanded(
-                        child: Text(
-                          invoice.supplierName,
-                          style: theme.textTheme.bodyMedium,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              invoice.supplierName,
+                              style: theme.textTheme.titleSmall,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              invoice.invoiceDate != null
+                                  ? _dateFormat.format(invoice.invoiceDate!)
+                                  : 'Undated',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       Text(
                         _currencyFormat.format(invoice.totalAmount),
-                        style: theme.textTheme.bodyMedium,
+                        style: theme.textTheme.titleMedium,
                       ),
                     ],
                   ),
@@ -221,18 +267,58 @@ class _RecentInvoicesList extends ConsumerWidget {
   }
 }
 
-class _StatsSkeleton extends StatelessWidget {
-  const _StatsSkeleton();
+class _DashboardSkeleton extends StatelessWidget {
+  const _DashboardSkeleton();
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Container(
-      height: 160,
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
-        borderRadius: BorderRadius.circular(16),
-      ),
+    final fill = theme.colorScheme.surfaceContainerHighest.withValues(
+      alpha: 0.4,
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          height: 168,
+          decoration: BoxDecoration(
+            color: fill,
+            borderRadius: BorderRadius.circular(24),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        Container(
+          height: 48,
+          decoration: BoxDecoration(
+            color: fill,
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.xxl),
+        Row(
+          children: [
+            Expanded(
+              child: Container(
+                height: 96,
+                decoration: BoxDecoration(
+                  color: fill,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Container(
+                height: 96,
+                decoration: BoxDecoration(
+                  color: fill,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

@@ -8,9 +8,11 @@ import 'package:fbr_taxvault/core/theme/app_spacing.dart';
 import 'package:fbr_taxvault/features/vault/domain/invoice_summary.dart';
 import 'package:fbr_taxvault/features/vault/domain/vault_filter.dart';
 import 'package:fbr_taxvault/features/vault/presentation/vault_controller.dart';
+import 'package:fbr_taxvault/shared/domain/document_type.dart';
 import 'package:fbr_taxvault/shared/widgets/empty_state.dart';
+import 'package:fbr_taxvault/shared/widgets/icon_chip.dart';
 
-final _currencyFormat = NumberFormat.currency(locale: 'en_US', symbol: 'PKR ', decimalDigits: 0);
+final _currencyFormat = NumberFormat.currency(locale: 'en_US', symbol: 'Rs ', decimalDigits: 0);
 final _dateFormat = DateFormat('d MMM yyyy');
 
 class VaultScreen extends ConsumerStatefulWidget {
@@ -162,16 +164,19 @@ class _InvoiceTile extends StatelessWidget {
     };
 
     return InkWell(
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(16),
       onTap: () => context.push(AppRoutes.invoiceReview(invoice.id)),
       child: Container(
-        padding: const EdgeInsets.all(AppSpacing.lg),
+        padding: const EdgeInsets.all(AppSpacing.md),
         decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
           border: Border.all(color: theme.colorScheme.outline),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
         ),
         child: Row(
           children: [
+            IconChip(icon: _iconFor(invoice.documentType), colorKey: invoice.supplierName),
+            const SizedBox(width: AppSpacing.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -199,7 +204,7 @@ class _InvoiceTile extends StatelessWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(_currencyFormat.format(invoice.totalAmount), style: theme.textTheme.titleSmall),
+                Text(_currencyFormat.format(invoice.totalAmount), style: theme.textTheme.titleMedium),
                 const SizedBox(height: 4),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -218,5 +223,14 @@ class _InvoiceTile extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  IconData _iconFor(DocumentType type) {
+    return switch (type) {
+      DocumentType.invoice => Icons.receipt_long_outlined,
+      DocumentType.receipt => Icons.receipt_outlined,
+      DocumentType.taxDocument => Icons.account_balance_outlined,
+      DocumentType.other => Icons.description_outlined,
+    };
   }
 }

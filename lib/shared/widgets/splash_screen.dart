@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:fbr_taxvault/core/constants/app_constants.dart';
 import 'package:fbr_taxvault/core/theme/app_spacing.dart';
+import 'package:fbr_taxvault/core/theme/app_theme.dart';
 
 class SplashScreen extends StatelessWidget {
   const SplashScreen({super.key});
@@ -13,13 +14,21 @@ class SplashScreen extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.shield_outlined, size: 40, color: theme.colorScheme.primary),
-            const SizedBox(height: AppSpacing.lg),
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: AppTheme.brandTint(theme.brightness == Brightness.dark),
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Icon(Icons.shield_outlined, color: theme.colorScheme.primary, size: 30),
+            ),
+            const SizedBox(height: AppSpacing.xl),
             Text(AppConstants.appName, style: theme.textTheme.headlineSmall),
             const SizedBox(height: AppSpacing.xxxl),
             const SizedBox(
-              width: 24,
-              height: 24,
+              width: 22,
+              height: 22,
               child: CircularProgressIndicator(strokeWidth: 2.5),
             ),
           ],

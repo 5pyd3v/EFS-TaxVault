@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:fbr_taxvault/core/errors/failure.dart';
 import 'package:fbr_taxvault/core/errors/result.dart';
 import 'package:fbr_taxvault/features/ai/domain/ai_processing_repository.dart';
+import 'package:fbr_taxvault/features/ai/domain/extraction_outcome.dart';
 
 class AiProcessingRepositoryImpl implements AiProcessingRepository {
   AiProcessingRepositoryImpl(this._client);
@@ -11,15 +12,22 @@ class AiProcessingRepositoryImpl implements AiProcessingRepository {
   final SupabaseClient _client;
 
   @override
-  Future<Result<String>> extractInvoice(String documentId) async {
+  Future<Result<ExtractionOutcome>> extractInvoice(String documentId, {bool force = false}) async {
     try {
       final response = await _client.functions.invoke(
         'extract-invoice',
-        body: {'document_id': documentId},
+        body: {'document_id': documentId, 'force': force},
       );
       final data = response.data;
+      if (data is Map && data['duplicate'] == true) {
+        return Result.ok(ExtractionDuplicate(
+          existingInvoiceId: data['existing_invoice_id'] as String,
+          existingInvoiceNumber: data['existing_invoice_number'] as String?,
+          existingTotalAmount: (data['existing_total_amount'] as num?)?.toDouble(),
+        ));
+      }
       if (data is Map && data['invoice_id'] is String) {
-        return Result.ok(data['invoice_id'] as String);
+        return Result.ok(ExtractionSuccess(data['invoice_id'] as String));
       }
       return const Result.err(
         ServerFailure('The document was saved, but analysis did not return a result.'),

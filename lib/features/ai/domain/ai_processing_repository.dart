@@ -1,10 +1,11 @@
 import 'package:fbr_taxvault/core/errors/result.dart';
+import 'package:fbr_taxvault/features/ai/domain/extraction_outcome.dart';
 
 abstract interface class AiProcessingRepository {
   /// Invokes the `extract-invoice` Edge Function (the only place Gemini is
-  /// called from) and returns the id of the invoice it created. This is a
-  /// single blocking call — the Edge Function does extraction, deterministic
-  /// validation, duplicate detection, and invoice creation before
-  /// responding, so there is no separate polling step.
-  Future<Result<String>> extractInvoice(String documentId);
+  /// called from) — extraction, deterministic validation, and duplicate
+  /// detection all happen server-side before this returns. Pass
+  /// [force] true only after the user has explicitly chosen "Save anyway"
+  /// on a duplicate prompt.
+  Future<Result<ExtractionOutcome>> extractInvoice(String documentId, {bool force = false});
 }

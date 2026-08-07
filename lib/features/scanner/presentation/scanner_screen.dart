@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:fbr_taxvault/core/router/app_routes.dart';
 import 'package:fbr_taxvault/core/theme/app_spacing.dart';
+import 'package:fbr_taxvault/core/theme/app_theme.dart';
 import 'package:fbr_taxvault/features/scanner/presentation/scanner_controller.dart';
 
 class ScannerScreen extends ConsumerWidget {
@@ -32,7 +33,15 @@ class ScannerScreen extends ConsumerWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.document_scanner_outlined, size: 56, color: theme.colorScheme.primary),
+            Container(
+              width: 88,
+              height: 88,
+              decoration: BoxDecoration(
+                color: AppTheme.brandTint(theme.brightness == Brightness.dark),
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Icon(Icons.document_scanner_outlined, color: theme.colorScheme.primary, size: 38),
+            ),
             const SizedBox(height: AppSpacing.xl),
             Text('Scan an invoice', style: theme.textTheme.headlineSmall, textAlign: TextAlign.center),
             const SizedBox(height: AppSpacing.sm),

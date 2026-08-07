@@ -3,11 +3,20 @@ import 'package:fbr_taxvault/core/theme/app_colors.dart';
 import 'package:fbr_taxvault/core/theme/app_semantic_colors.dart';
 import 'package:fbr_taxvault/core/theme/app_typography.dart';
 
-/// Central place components pull their look from. Cards/inputs favor subtle
-/// 1px borders over shadows/elevation — flat, high-trust, not skeuomorphic.
+/// Central place components pull their look from. Cards pair a hairline
+/// border with a very soft ambient shadow — enough depth to read as a
+/// considered product (Ramp/Brex-tier), not so much it feels skeuomorphic.
 abstract final class AppTheme {
   static ThemeData get light => _build(brightness: Brightness.light);
   static ThemeData get dark => _build(brightness: Brightness.dark);
+
+  /// A light brand-tinted background for badges/icon marks and the
+  /// dashboard's hero card — a soft tint plus brand-colored text/icon reads
+  /// as considered and light, versus a saturated gradient block which
+  /// reads as an off-the-shelf "AI app" template.
+  static Color brandTint(bool isDark) {
+    return isDark ? AppColors.brandDark.withValues(alpha: 0.35) : const Color(0xFFE9F0FE);
+  }
 
   static ThemeData _build({required Brightness brightness}) {
     final isDark = brightness == Brightness.dark;
@@ -39,7 +48,9 @@ abstract final class AppTheme {
       ),
       cardTheme: CardThemeData(
         color: surface,
-        elevation: 0,
+        elevation: isDark ? 0 : 2,
+        shadowColor: Colors.black.withValues(alpha: 0.05),
+        surfaceTintColor: Colors.transparent,
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
@@ -53,7 +64,8 @@ abstract final class AppTheme {
           foregroundColor: colorScheme.onPrimary,
           disabledBackgroundColor: colorScheme.primary.withValues(alpha: 0.4),
           elevation: 0,
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          minimumSize: const Size.fromHeight(46),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           textStyle: textTheme.labelLarge,
         ),
@@ -62,7 +74,8 @@ abstract final class AppTheme {
         style: OutlinedButton.styleFrom(
           foregroundColor: textPrimary,
           side: BorderSide(color: border),
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          minimumSize: const Size.fromHeight(46),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           textStyle: textTheme.labelLarge,
         ),
@@ -70,14 +83,14 @@ abstract final class AppTheme {
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: colorScheme.primary,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
           textStyle: textTheme.labelLarge,
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: isDark ? AppColors.darkSurfaceMuted : AppColors.lightSurfaceMuted,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: border),
@@ -102,7 +115,7 @@ abstract final class AppTheme {
         indicatorColor: colorScheme.primary.withValues(alpha: 0.12),
         elevation: 0,
         surfaceTintColor: Colors.transparent,
-        height: 68,
+        height: 60,
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           final selected = states.contains(WidgetState.selected);
           return textTheme.labelMedium?.copyWith(
@@ -121,7 +134,7 @@ abstract final class AppTheme {
           color: isDark ? AppColors.darkBackground : AppColors.lightBackground,
         ),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
     );
   }

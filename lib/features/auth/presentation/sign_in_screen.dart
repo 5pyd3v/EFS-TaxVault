@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:fbr_taxvault/core/constants/app_constants.dart';
 import 'package:fbr_taxvault/core/router/app_routes.dart';
 import 'package:fbr_taxvault/core/theme/app_spacing.dart';
+import 'package:fbr_taxvault/core/theme/app_theme.dart';
 import 'package:fbr_taxvault/features/auth/presentation/auth_controller.dart';
 import 'package:fbr_taxvault/shared/utils/validators.dart';
 
@@ -62,7 +63,17 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: AppSpacing.xxxl),
+                const SizedBox(height: AppSpacing.xl),
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: AppTheme.brandTint(theme.brightness == Brightness.dark),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Icon(Icons.shield_outlined, color: theme.colorScheme.primary, size: 26),
+                ),
+                const SizedBox(height: AppSpacing.xl),
                 Text(AppConstants.appName, style: theme.textTheme.headlineMedium),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
@@ -71,8 +82,15 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
-                const SizedBox(height: AppSpacing.giant),
-                Text('Welcome back', style: theme.textTheme.titleLarge),
+                const SizedBox(height: AppSpacing.huge),
+                Text('Welcome back', style: theme.textTheme.headlineSmall),
+                const SizedBox(height: 2),
+                Text(
+                  'Sign in to continue to your vault',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
                 const SizedBox(height: AppSpacing.xxl),
                 TextFormField(
                   controller: _emailController,

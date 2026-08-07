@@ -34,6 +34,19 @@ const DOCUMENT_BUCKET = 'documents';
 
 interface ExtractInvoiceRequest {
   document_id: string;
+  /** Set when the user explicitly chose "Save anyway" after being shown a
+   * possible-duplicate prompt — bypasses the duplicate gate below. */
+  force?: boolean;
+}
+
+/** Gemini occasionally degenerates into a repetition loop on a single
+ * field (a known LLM failure mode) — cap anything that reaches a text
+ * column so a runaway string can't land in the database. */
+function sanitizeText(value: string | undefined | null, maxLength = 120): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed.length > maxLength ? trimmed.slice(0, maxLength) : trimmed;
 }
 
 interface Warning {
@@ -129,21 +142,32 @@ Deno.serve(async (req) => {
 
     const warnings: Warning[] = [];
     const totals = normalizeTotals(extraction, warnings);
+    const invoiceNumber = sanitizeText(extraction.document?.invoiceNumber);
+    const invoiceDate = sanitizeText(extraction.document?.invoiceDate, 10);
 
+    // Duplicate check happens BEFORE creating anything: scanning the same
+    // receipt twice must not silently produce two invoices (spec §16 —
+    // "Show: Possible duplicate invoice. Allow: View Existing, Save
+    // Anyway"). Unless the caller already confirmed via `force`, stop here
+    // and let the client decide.
     const duplicate = await findPossibleDuplicate(
       serviceClient,
       document.organization_id,
       document.document_hash,
-      extraction.document?.invoiceNumber,
-      extraction.document?.invoiceDate,
+      invoiceNumber,
+      invoiceDate,
       totals.totalAmount,
     );
-    if (duplicate) {
-      warnings.push({
-        code: 'possible_duplicate',
-        severity: 'warning',
-        message: 'This looks similar to an existing invoice. Please verify it isn’t a duplicate.',
-        field_path: null,
+    if (duplicate && !body.force) {
+      await serviceClient
+        .from('ai_processing_jobs')
+        .update({ status: 'completed', completed_at: new Date().toISOString() })
+        .eq('id', jobId);
+      return jsonResponse({
+        duplicate: true,
+        existing_invoice_id: duplicate.id,
+        existing_invoice_number: duplicate.invoice_number,
+        existing_total_amount: duplicate.total_amount,
       });
     }
 
@@ -157,9 +181,9 @@ Deno.serve(async (req) => {
         supplier_id: supplierId,
         schema_version: '1.0',
         document_type: document.document_type,
-        invoice_number: extraction.document?.invoiceNumber ?? null,
-        invoice_date: extraction.document?.invoiceDate ?? null,
-        currency: extraction.document?.currency ?? 'PKR',
+        invoice_number: invoiceNumber,
+        invoice_date: invoiceDate,
+        currency: sanitizeText(extraction.document?.currency, 8) ?? 'PKR',
         subtotal: totals.subtotal,
         discount: totals.discount,
         taxable_amount: totals.taxableAmount,
@@ -373,6 +397,12 @@ function round2(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+interface DuplicateMatch {
+  id: string;
+  invoice_number: string | null;
+  total_amount: number;
+}
+
 async function findPossibleDuplicate(
   // deno-lint-ignore no-explicit-any
   serviceClient: any,
@@ -381,30 +411,30 @@ async function findPossibleDuplicate(
   invoiceNumber: string | null | undefined,
   invoiceDate: string | null | undefined,
   totalAmount: number,
-): Promise<boolean> {
+): Promise<DuplicateMatch | null> {
   if (documentHash) {
     const { data } = await serviceClient
       .from('invoices')
-      .select('id')
+      .select('id, invoice_number, total_amount')
       .eq('organization_id', organizationId)
       .eq('document_hash', documentHash)
       .limit(1);
-    if (data && data.length > 0) return true;
+    if (data && data.length > 0) return data[0];
   }
 
   if (invoiceNumber && invoiceDate) {
     const { data } = await serviceClient
       .from('invoices')
-      .select('id')
+      .select('id, invoice_number, total_amount')
       .eq('organization_id', organizationId)
       .eq('invoice_number', invoiceNumber)
       .eq('invoice_date', invoiceDate)
       .eq('total_amount', totalAmount)
       .limit(1);
-    if (data && data.length > 0) return true;
+    if (data && data.length > 0) return data[0];
   }
 
-  return false;
+  return null;
 }
 
 async function upsertParty(
@@ -414,14 +444,16 @@ async function upsertParty(
   table: 'suppliers' | 'customers',
   party: InvoiceExtractionResult['supplier'],
 ): Promise<string | null> {
-  if (!party?.name) return null;
+  const name = sanitizeText(party?.name, 200);
+  if (!name) return null;
+  const ntn = sanitizeText(party?.ntn, 30);
 
-  if (party.ntn) {
+  if (ntn) {
     const { data: existing } = await serviceClient
       .from(table)
       .select('id')
       .eq('organization_id', organizationId)
-      .eq('ntn', party.ntn)
+      .eq('ntn', ntn)
       .maybeSingle();
     if (existing) return existing.id;
   }
@@ -430,13 +462,13 @@ async function upsertParty(
     .from(table)
     .insert({
       organization_id: organizationId,
-      name: party.name,
-      ntn: party.ntn ?? null,
-      strn: party.strn ?? null,
-      registration_status: party.registrationStatus ?? null,
-      province: party.province ?? null,
-      city: party.city ?? null,
-      address: party.addressLine ? { line1: party.addressLine } : null,
+      name,
+      ntn,
+      strn: sanitizeText(party?.strn, 30),
+      registration_status: sanitizeText(party?.registrationStatus, 40),
+      province: sanitizeText(party?.province, 60),
+      city: sanitizeText(party?.city, 60),
+      address: party?.addressLine ? { line1: sanitizeText(party.addressLine, 300) } : null,
     })
     .select('id')
     .single();

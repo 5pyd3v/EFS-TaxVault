@@ -24,7 +24,11 @@ import {
   INVOICE_EXTRACTION_PROMPT_VERSION,
 } from '../_shared/prompts/invoice_extraction_v1.ts';
 
-const GEMINI_MODEL = 'gemini-2.5-flash';
+// An alias, not a pinned version — always resolves to Google's current
+// recommended flash model, so this doesn't silently break again the next
+// time a specific dated model is retired (as gemini-2.5-flash was for new
+// API keys).
+const GEMINI_MODEL = 'gemini-flash-latest';
 const CALCULATION_TOLERANCE = 1.0; // PKR — rounding slack before flagging a mismatch
 const DOCUMENT_BUCKET = 'documents';
 

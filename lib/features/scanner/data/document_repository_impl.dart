@@ -73,11 +73,10 @@ class DocumentRepositoryImpl implements DocumentRepository {
         'file_size_bytes': totalBytes,
       }).eq('id', documentId);
 
-      await _client.from('ai_processing_jobs').insert({
-        'organization_id': organizationId,
-        'document_id': documentId,
-        'status': 'queued',
-      });
+      // No client-side ai_processing_jobs row here on purpose: that table
+      // is service-role-write-only (spec §7 — AI requests are server-side
+      // only), and the extract-invoice Edge Function creates its own job
+      // row if one doesn't already exist when it's invoked next.
 
       return Result.ok(Document(
         id: documentId,

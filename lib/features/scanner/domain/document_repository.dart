@@ -4,10 +4,10 @@ import 'package:fbr_taxvault/features/scanner/domain/scanned_page.dart';
 import 'package:fbr_taxvault/shared/domain/document_type.dart';
 
 abstract interface class DocumentRepository {
-  /// Compresses, uploads, and records a captured/imported document. Also
-  /// queues an `ai_processing_jobs` row (status `queued`) so the pipeline
-  /// has a hook to pick up once AI extraction (Phase 5) exists — no
-  /// extraction happens here.
+  /// Compresses, uploads, and records a captured/imported document.
+  /// Extraction is not queued here — the `extract-invoice` Edge Function
+  /// creates its own `ai_processing_jobs` row (service-role only) when it's
+  /// invoked next.
   Future<Result<Document>> uploadScannedDocument({
     required String organizationId,
     required List<ScannedPage> pages,

@@ -13,10 +13,9 @@ class OnboardingController extends AsyncNotifier<void> {
     required OrganizationType type,
   }) async {
     state = const AsyncLoading();
-    final result = await ref.read(organizationRepositoryProvider).createOrganization(
-          name: name,
-          type: type,
-        );
+    final result = await ref
+        .read(organizationRepositoryProvider)
+        .createOrganization(name: name, type: type);
     return result.fold(
       (_) {
         state = const AsyncData(null);
@@ -31,6 +30,5 @@ class OnboardingController extends AsyncNotifier<void> {
   }
 }
 
-final onboardingControllerProvider = AsyncNotifierProvider<OnboardingController, void>(
-  OnboardingController.new,
-);
+final onboardingControllerProvider =
+    AsyncNotifierProvider<OnboardingController, void>(OnboardingController.new);

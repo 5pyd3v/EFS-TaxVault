@@ -5,5 +5,6 @@ class AppUser {
   final String email;
   final String? fullName;
 
-  String get displayName => fullName?.trim().isNotEmpty == true ? fullName! : email;
+  String get displayName =>
+      fullName?.trim().isNotEmpty == true ? fullName! : email;
 }

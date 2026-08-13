@@ -22,7 +22,7 @@ import {
 import {
   INVOICE_EXTRACTION_PROMPT,
   INVOICE_EXTRACTION_PROMPT_VERSION,
-} from '../_shared/prompts/invoice_extraction_v1.ts';
+} from '../_shared/prompts/invoice_extraction_v2.ts';
 
 // An alias, not a pinned version — always resolves to Google's current
 // recommended flash model, so this doesn't silently break again the next
@@ -346,7 +346,14 @@ async function callGemini(
         generationConfig: {
           responseMimeType: 'application/json',
           responseSchema: invoiceExtractionResponseSchema,
-          temperature: 0.1,
+          // Low but non-zero: fully deterministic (0) sometimes makes
+          // vision models more prone to confidently skipping a field it
+          // isn't sure about rather than reporting a best-effort read.
+          temperature: 0.2,
+          // Generous headroom so a long multi-item invoice's JSON never
+          // gets cut off mid-field, which would otherwise look identical
+          // to a genuinely missing invoice number/date/tax value.
+          maxOutputTokens: 8192,
         },
       }),
     },

@@ -26,10 +26,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    await ref.read(onboardingControllerProvider.notifier).createOrganization(
-          name: _nameController.text.trim(),
-          type: _type,
-        );
+    await ref
+        .read(onboardingControllerProvider.notifier)
+        .createOrganization(name: _nameController.text.trim(), type: _type);
   }
 
   @override
@@ -68,10 +67,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'One more step',
-                  style: theme.textTheme.headlineSmall,
-                ),
+                Text('One more step', style: theme.textTheme.headlineSmall),
                 const SizedBox(height: AppSpacing.sm),
                 Text(
                   'Every invoice, document, and report in TaxVault belongs to an organization — '
@@ -107,7 +103,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                         ? 'Business name'
                         : 'Display name',
                   ),
-                  validator: (v) => Validators.required(v, message: 'This name is required'),
+                  validator: (v) =>
+                      Validators.required(v, message: 'This name is required'),
                   enabled: !isLoading,
                   onFieldSubmitted: (_) => _submit(),
                 ),
@@ -120,7 +117,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                         ? const SizedBox(
                             width: 20,
                             height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
                           )
                         : const Text('Continue'),
                   ),

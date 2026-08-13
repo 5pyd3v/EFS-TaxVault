@@ -7,5 +7,8 @@ abstract interface class AiProcessingRepository {
   /// detection all happen server-side before this returns. Pass
   /// [force] true only after the user has explicitly chosen "Save anyway"
   /// on a duplicate prompt.
-  Future<Result<ExtractionOutcome>> extractInvoice(String documentId, {bool force = false});
+  Future<Result<ExtractionOutcome>> extractInvoice(
+    String documentId, {
+    bool force = false,
+  });
 }

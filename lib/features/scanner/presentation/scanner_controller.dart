@@ -53,7 +53,10 @@ class ScannerController extends Notifier<ScannerState> {
     } on ScannerException catch (e) {
       state = ScannerState(pages: state.pages, errorMessage: e.message);
     } catch (_) {
-      state = ScannerState(pages: state.pages, errorMessage: 'Could not open the scanner.');
+      state = ScannerState(
+        pages: state.pages,
+        errorMessage: 'Could not open the scanner.',
+      );
     }
   }
 
@@ -63,7 +66,10 @@ class ScannerController extends Notifier<ScannerState> {
       final newPages = await ref.read(scannerServiceProvider).pickFromGallery();
       state = ScannerState(pages: [...state.pages, ...newPages]);
     } catch (_) {
-      state = ScannerState(pages: state.pages, errorMessage: 'Could not open the gallery.');
+      state = ScannerState(
+        pages: state.pages,
+        errorMessage: 'Could not open the gallery.',
+      );
     }
   }
 
@@ -91,7 +97,9 @@ class ScannerController extends Notifier<ScannerState> {
     if (state.pages.isEmpty) return null;
 
     state = ScannerState(pages: state.pages, isUploading: true);
-    final result = await ref.read(documentRepositoryProvider).uploadScannedDocument(
+    final result = await ref
+        .read(documentRepositoryProvider)
+        .uploadScannedDocument(
           organizationId: organizationId,
           pages: state.pages,
           documentType: documentType,
@@ -117,6 +125,5 @@ class ScannerController extends Notifier<ScannerState> {
   }
 }
 
-final scannerControllerProvider = NotifierProvider<ScannerController, ScannerState>(
-  ScannerController.new,
-);
+final scannerControllerProvider =
+    NotifierProvider<ScannerController, ScannerState>(ScannerController.new);

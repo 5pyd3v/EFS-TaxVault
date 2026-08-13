@@ -11,7 +11,9 @@ sealed class Failure {
 }
 
 final class NetworkFailure extends Failure {
-  const NetworkFailure([super.message = 'No internet connection. Please try again.']);
+  const NetworkFailure([
+    super.message = 'No internet connection. Please try again.',
+  ]);
 }
 
 final class AuthFailure extends Failure {
@@ -26,11 +28,15 @@ final class ValidationFailure extends Failure {
 }
 
 final class ServerFailure extends Failure {
-  const ServerFailure([super.message = 'Something went wrong on our end. Please try again.']);
+  const ServerFailure([
+    super.message = 'Something went wrong on our end. Please try again.',
+  ]);
 }
 
 final class NotFoundFailure extends Failure {
-  const NotFoundFailure([super.message = 'The requested item could not be found.']);
+  const NotFoundFailure([
+    super.message = 'The requested item could not be found.',
+  ]);
 }
 
 final class UnknownFailure extends Failure {

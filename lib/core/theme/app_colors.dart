@@ -84,15 +84,37 @@ class ChipPalette {
 /// color choice anywhere.
 abstract final class AppChipColors {
   static const _palette = [
-    (AppColors.chipTeal, AppColors.chipTealContainerLight, AppColors.chipTealContainerDark),
-    (AppColors.chipCoral, AppColors.chipCoralContainerLight, AppColors.chipCoralContainerDark),
-    (AppColors.chipGreen, AppColors.chipGreenContainerLight, AppColors.chipGreenContainerDark),
-    (AppColors.chipAmber, AppColors.chipAmberContainerLight, AppColors.chipAmberContainerDark),
-    (AppColors.chipPurple, AppColors.chipPurpleContainerLight, AppColors.chipPurpleContainerDark),
+    (
+      AppColors.chipTeal,
+      AppColors.chipTealContainerLight,
+      AppColors.chipTealContainerDark,
+    ),
+    (
+      AppColors.chipCoral,
+      AppColors.chipCoralContainerLight,
+      AppColors.chipCoralContainerDark,
+    ),
+    (
+      AppColors.chipGreen,
+      AppColors.chipGreenContainerLight,
+      AppColors.chipGreenContainerDark,
+    ),
+    (
+      AppColors.chipAmber,
+      AppColors.chipAmberContainerLight,
+      AppColors.chipAmberContainerDark,
+    ),
+    (
+      AppColors.chipPurple,
+      AppColors.chipPurpleContainerLight,
+      AppColors.chipPurpleContainerDark,
+    ),
   ];
 
   static ChipPalette forKey(String key, {required bool isDark}) {
-    final index = key.isEmpty ? 0 : key.codeUnits.fold<int>(0, (a, b) => a + b) % _palette.length;
+    final index = key.isEmpty
+        ? 0
+        : key.codeUnits.fold<int>(0, (a, b) => a + b) % _palette.length;
     final (fg, lightContainer, darkContainer) = _palette[index];
     return ChipPalette(fg, isDark ? darkContainer : lightContainer);
   }

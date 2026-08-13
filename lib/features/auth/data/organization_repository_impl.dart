@@ -49,17 +49,21 @@ class OrganizationRepositoryImpl implements OrganizationRepository {
       // caller's `owner` membership row in a single transaction, so an
       // organization is never left without a member (see
       // supabase/migrations/0009_triggers.sql).
-      final orgId = await _client.rpc(
-        'create_organization_with_owner',
-        params: {'org_name': name, 'org_type': type.name},
-      ) as String;
+      final orgId =
+          await _client.rpc(
+                'create_organization_with_owner',
+                params: {'org_name': name, 'org_type': type.name},
+              )
+              as String;
 
-      return Result.ok(Organization(
-        id: orgId,
-        name: name,
-        type: type,
-        role: OrganizationRole.owner,
-      ));
+      return Result.ok(
+        Organization(
+          id: orgId,
+          name: name,
+          type: type,
+          role: OrganizationRole.owner,
+        ),
+      );
     } on SocketException {
       return const Result.err(NetworkFailure());
     } on PostgrestException catch (e) {

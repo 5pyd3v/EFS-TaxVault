@@ -77,7 +77,8 @@ class InvoiceDetail {
   final List<InvoiceItemLine> items;
   final List<AiWarning> warnings;
 
-  double confidenceFor(String field) => (aiConfidence[field] as num?)?.toDouble() ?? 1.0;
+  double confidenceFor(String field) =>
+      (aiConfidence[field] as num?)?.toDouble() ?? 1.0;
 
   factory InvoiceDetail.fromMap(
     Map<String, dynamic> invoice, {
@@ -97,8 +98,11 @@ class InvoiceDetail {
       otherTaxes: (invoice['other_taxes'] as num?)?.toDouble() ?? 0,
       totalAmount: (invoice['total_amount'] as num?)?.toDouble() ?? 0,
       calculationMismatch: invoice['calculation_mismatch'] as bool? ?? false,
-      verificationStatus: invoice['verification_status'] as String? ?? 'needs_review',
-      aiConfidence: (invoice['ai_confidence'] as Map?)?.cast<String, dynamic>() ?? const {},
+      verificationStatus:
+          invoice['verification_status'] as String? ?? 'needs_review',
+      aiConfidence:
+          (invoice['ai_confidence'] as Map?)?.cast<String, dynamic>() ??
+          const {},
       items: items.map(InvoiceItemLine.fromMap).toList(),
       warnings: warnings.map(AiWarning.fromMap).toList(),
     );

@@ -30,7 +30,9 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    await ref.read(authControllerProvider.notifier).signIn(
+    await ref
+        .read(authControllerProvider.notifier)
+        .signIn(
           email: _emailController.text.trim(),
           password: _passwordController.text,
         );
@@ -68,13 +70,22 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                   width: 56,
                   height: 56,
                   decoration: BoxDecoration(
-                    color: AppTheme.brandTint(theme.brightness == Brightness.dark),
+                    color: AppTheme.brandTint(
+                      theme.brightness == Brightness.dark,
+                    ),
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  child: Icon(Icons.shield_outlined, color: theme.colorScheme.primary, size: 26),
+                  child: Icon(
+                    Icons.shield_outlined,
+                    color: theme.colorScheme.primary,
+                    size: 26,
+                  ),
                 ),
                 const SizedBox(height: AppSpacing.xl),
-                Text(AppConstants.appName, style: theme.textTheme.headlineMedium),
+                Text(
+                  AppConstants.appName,
+                  style: theme.textTheme.headlineMedium,
+                ),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
                   AppConstants.appTagline,
@@ -108,10 +119,13 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                   decoration: InputDecoration(
                     labelText: 'Password',
                     suffixIcon: IconButton(
-                      icon: Icon(_obscurePassword
-                          ? Icons.visibility_outlined
-                          : Icons.visibility_off_outlined),
-                      onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                      icon: Icon(
+                        _obscurePassword
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined,
+                      ),
+                      onPressed: () =>
+                          setState(() => _obscurePassword = !_obscurePassword),
                     ),
                   ),
                   validator: Validators.password,
@@ -127,7 +141,10 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                         ? const SizedBox(
                             width: 20,
                             height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
                           )
                         : const Text('Sign In'),
                   ),
@@ -135,7 +152,9 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                 const SizedBox(height: AppSpacing.xl),
                 Center(
                   child: TextButton(
-                    onPressed: isLoading ? null : () => context.push(AppRoutes.signUp),
+                    onPressed: isLoading
+                        ? null
+                        : () => context.push(AppRoutes.signUp),
                     child: const Text("Don't have an account? Sign up"),
                   ),
                 ),

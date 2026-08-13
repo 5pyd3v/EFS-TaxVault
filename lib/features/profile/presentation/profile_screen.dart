@@ -1,8 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:fbr_taxvault/core/constants/app_constants.dart';
+import 'package:fbr_taxvault/core/router/app_routes.dart';
+import 'package:fbr_taxvault/core/theme/app_gradients.dart';
 import 'package:fbr_taxvault/core/theme/app_spacing.dart';
 import 'package:fbr_taxvault/features/auth/presentation/auth_controller.dart';
 import 'package:fbr_taxvault/features/auth/presentation/auth_providers.dart';
+import 'package:fbr_taxvault/features/notifications/presentation/notifications_providers.dart';
+import 'package:fbr_taxvault/shared/widgets/app_card.dart';
+import 'package:fbr_taxvault/shared/widgets/icon_chip.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -13,6 +20,8 @@ class ProfileScreen extends ConsumerWidget {
     final user = ref.watch(currentUserProvider);
     final organization = ref.watch(currentOrganizationProvider);
     final authState = ref.watch(authControllerProvider);
+    final unreadAsync = ref.watch(unreadNotificationsCountProvider);
+    final unreadCount = unreadAsync.valueOrNull ?? 0;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Profile')),
@@ -20,19 +29,30 @@ class ProfileScreen extends ConsumerWidget {
         padding: const EdgeInsets.all(AppSpacing.xxl),
         children: [
           Container(
+            width: double.infinity,
             padding: const EdgeInsets.all(AppSpacing.xl),
             decoration: BoxDecoration(
-              border: Border.all(color: theme.colorScheme.outline),
-              borderRadius: BorderRadius.circular(16),
+              gradient: AppGradients.blue,
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF2E7CF6).withValues(alpha: 0.32),
+                  blurRadius: 28,
+                  offset: const Offset(0, 14),
+                  spreadRadius: -8,
+                ),
+              ],
             ),
             child: Row(
               children: [
                 CircleAvatar(
-                  radius: 24,
-                  backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.12),
+                  radius: 26,
+                  backgroundColor: Colors.white.withValues(alpha: 0.2),
                   child: Text(
                     _initial(user?.displayName),
-                    style: theme.textTheme.titleLarge?.copyWith(color: theme.colorScheme.primary),
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      color: Colors.white,
+                    ),
                   ),
                 ),
                 const SizedBox(width: AppSpacing.lg),
@@ -40,13 +60,22 @@ class ProfileScreen extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(user?.displayName ?? '', style: theme.textTheme.titleMedium),
+                      Text(
+                        user?.displayName ?? '',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          color: Colors.white,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                       const SizedBox(height: 2),
                       Text(
                         user?.email ?? '',
                         style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
+                          color: Colors.white.withValues(alpha: 0.85),
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
@@ -55,24 +84,75 @@ class ProfileScreen extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: AppSpacing.xxl),
-          if (organization != null)
-            _ProfileTile(
-              icon: Icons.apartment_rounded,
-              title: organization.name,
-              subtitle: 'Your role: ${organization.role.name}',
+          Text(
+            'Workspace',
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
             ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          _SettingsGroup(
+            children: [
+              if (organization != null)
+                _SettingsTile(
+                  icon: Icons.apartment_rounded,
+                  iconColorKey: organization.name,
+                  title: organization.name,
+                  subtitle: 'Your role: ${_roleLabel(organization.role.name)}',
+                ),
+              _SettingsTile(
+                icon: Icons.notifications_outlined,
+                iconColorKey: 'notifications',
+                title: 'Notifications',
+                subtitle: unreadCount > 0
+                    ? '$unreadCount unread'
+                    : 'All caught up',
+                onTap: () => context.push(AppRoutes.notifications),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.xxl),
+          Text(
+            'About',
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          _SettingsGroup(
+            children: const [
+              _SettingsTile(
+                icon: Icons.shield_outlined,
+                iconColorKey: 'about',
+                title: AppConstants.appName,
+                subtitle: AppConstants.appTagline,
+              ),
+            ],
+          ),
           const SizedBox(height: AppSpacing.xxxl),
-          OutlinedButton.icon(
-            onPressed: authState.isLoading
-                ? null
-                : () => ref.read(authControllerProvider.notifier).signOut(),
-            icon: const Icon(Icons.logout_rounded),
-            label: const Text('Sign out'),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: theme.colorScheme.error,
+                side: BorderSide(
+                  color: theme.colorScheme.error.withValues(alpha: 0.4),
+                ),
+              ),
+              onPressed: authState.isLoading
+                  ? null
+                  : () => ref.read(authControllerProvider.notifier).signOut(),
+              icon: const Icon(Icons.logout_rounded),
+              label: const Text('Sign out'),
+            ),
           ),
         ],
       ),
     );
   }
+
+  String _roleLabel(String role) =>
+      role.isEmpty ? role : '${role[0].toUpperCase()}${role.substring(1)}';
 }
 
 String _initial(String? name) {
@@ -80,21 +160,86 @@ String _initial(String? name) {
   return trimmed.isEmpty ? '?' : trimmed[0].toUpperCase();
 }
 
-class _ProfileTile extends StatelessWidget {
-  const _ProfileTile({required this.icon, required this.title, required this.subtitle});
+/// A soft-shadow card that groups related [_SettingsTile]s with dividers
+/// between them — one card per section instead of loose rows.
+class _SettingsGroup extends StatelessWidget {
+  const _SettingsGroup({required this.children});
 
-  final IconData icon;
-  final String title;
-  final String subtitle;
+  final List<Widget> children;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: Icon(icon, color: theme.colorScheme.onSurfaceVariant),
-      title: Text(title, style: theme.textTheme.titleSmall),
-      subtitle: Text(subtitle, style: theme.textTheme.bodySmall),
+    return AppCard(
+      padding: EdgeInsets.zero,
+      child: Column(
+        children: [
+          for (var i = 0; i < children.length; i++) ...[
+            if (i > 0)
+              Divider(
+                height: 1,
+                indent: AppSpacing.lg,
+                endIndent: AppSpacing.lg,
+                color: theme.colorScheme.outline,
+              ),
+            children[i],
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _SettingsTile extends StatelessWidget {
+  const _SettingsTile({
+    required this.icon,
+    required this.iconColorKey,
+    required this.title,
+    required this.subtitle,
+    this.onTap,
+  });
+
+  final IconData icon;
+  final String iconColorKey;
+  final String title;
+  final String subtitle;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Row(
+          children: [
+            IconChip(icon: icon, colorKey: iconColorKey, size: 36),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: theme.textTheme.titleSmall),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (onTap != null)
+              Icon(
+                Icons.chevron_right_rounded,
+                size: 20,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+          ],
+        ),
+      ),
     );
   }
 }

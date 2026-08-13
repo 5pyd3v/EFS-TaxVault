@@ -15,7 +15,10 @@ abstract final class Validators {
     return null;
   }
 
-  static String? required(String? value, {String message = 'This field is required'}) {
+  static String? required(
+    String? value, {
+    String message = 'This field is required',
+  }) {
     if ((value ?? '').trim().isEmpty) return message;
     return null;
   }

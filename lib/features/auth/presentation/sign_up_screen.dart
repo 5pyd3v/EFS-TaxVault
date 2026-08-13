@@ -28,7 +28,9 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    await ref.read(authControllerProvider.notifier).signUp(
+    await ref
+        .read(authControllerProvider.notifier)
+        .signUp(
           fullName: _nameController.text.trim(),
           email: _emailController.text.trim(),
           password: _passwordController.text,
@@ -60,7 +62,10 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Create your account', style: theme.textTheme.headlineSmall),
+                Text(
+                  'Create your account',
+                  style: theme.textTheme.headlineSmall,
+                ),
                 const SizedBox(height: AppSpacing.sm),
                 Text(
                   'Set up EFS TaxVault for you or your business.',
@@ -73,7 +78,8 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                   controller: _nameController,
                   textInputAction: TextInputAction.next,
                   decoration: const InputDecoration(labelText: 'Full name'),
-                  validator: (v) => Validators.required(v, message: 'Full name is required'),
+                  validator: (v) =>
+                      Validators.required(v, message: 'Full name is required'),
                   enabled: !isLoading,
                 ),
                 const SizedBox(height: AppSpacing.lg),
@@ -94,10 +100,13 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                     labelText: 'Password',
                     helperText: 'At least 8 characters',
                     suffixIcon: IconButton(
-                      icon: Icon(_obscurePassword
-                          ? Icons.visibility_outlined
-                          : Icons.visibility_off_outlined),
-                      onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                      icon: Icon(
+                        _obscurePassword
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined,
+                      ),
+                      onPressed: () =>
+                          setState(() => _obscurePassword = !_obscurePassword),
                     ),
                   ),
                   validator: Validators.password,
@@ -113,7 +122,10 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                         ? const SizedBox(
                             width: 20,
                             height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
                           )
                         : const Text('Create Account'),
                   ),

@@ -29,7 +29,9 @@ final myOrganizationsProvider = FutureProvider<List<Organization>>((ref) async {
   final user = ref.watch(currentUserProvider);
   if (user == null) return const [];
 
-  final result = await ref.watch(organizationRepositoryProvider).getMyOrganizations();
+  final result = await ref
+      .watch(organizationRepositoryProvider)
+      .getMyOrganizations();
   return result.fold((orgs) => orgs, (failure) => throw failure);
 });
 
@@ -37,7 +39,9 @@ final myOrganizationsProvider = FutureProvider<List<Organization>>((ref) async {
 /// (first one returned) — an organization switcher is future work once
 /// multi-org membership is exposed in the UI.
 final currentOrganizationProvider = Provider<Organization?>((ref) {
-  return ref.watch(myOrganizationsProvider).maybeWhen(
+  return ref
+      .watch(myOrganizationsProvider)
+      .maybeWhen(
         data: (orgs) => orgs.isEmpty ? null : orgs.first,
         orElse: () => null,
       );

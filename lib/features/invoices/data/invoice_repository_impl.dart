@@ -17,8 +17,16 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
   Future<Result<InvoiceDetail>> getInvoiceDetail(String invoiceId) async {
     try {
       final results = await Future.wait([
-        _client.from('invoices').select('*, suppliers(name)').eq('id', invoiceId).single(),
-        _client.from('invoice_items').select().eq('invoice_id', invoiceId).order('line_no'),
+        _client
+            .from('invoices')
+            .select('*, suppliers(name)')
+            .eq('id', invoiceId)
+            .single(),
+        _client
+            .from('invoice_items')
+            .select()
+            .eq('invoice_id', invoiceId)
+            .order('line_no'),
         _client
             .from('ai_warnings')
             .select('severity, message')
@@ -31,12 +39,14 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
       final warnings = (results[2] as List).cast<Map<String, dynamic>>();
       final supplier = invoice['suppliers'] as Map<String, dynamic>?;
 
-      return Result.ok(InvoiceDetail.fromMap(
-        invoice,
-        items: items,
-        warnings: warnings,
-        supplierName: supplier?['name'] as String? ?? '',
-      ));
+      return Result.ok(
+        InvoiceDetail.fromMap(
+          invoice,
+          items: items,
+          warnings: warnings,
+          supplierName: supplier?['name'] as String? ?? '',
+        ),
+      );
     } on SocketException {
       return const Result.err(NetworkFailure());
     } on PostgrestException catch (e) {
@@ -60,22 +70,26 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
     try {
       final taxableAmount = _round2(subtotal - discount);
       final expectedTotal = _round2(taxableAmount + salesTax + otherTaxes);
-      final calculationMismatch = (expectedTotal - totalAmount).abs() > _calculationTolerance;
+      final calculationMismatch =
+          (expectedTotal - totalAmount).abs() > _calculationTolerance;
 
-      await _client.from('invoices').update({
-        'invoice_number': invoiceNumber,
-        'invoice_date': invoiceDate,
-        'subtotal': _round2(subtotal),
-        'discount': _round2(discount),
-        'taxable_amount': taxableAmount,
-        'sales_tax': _round2(salesTax),
-        'other_taxes': _round2(otherTaxes),
-        'total_amount': _round2(totalAmount),
-        'calculation_mismatch': calculationMismatch,
-        'verification_status': 'verified',
-        'verified_by': _client.auth.currentUser!.id,
-        'verified_at': DateTime.now().toIso8601String(),
-      }).eq('id', invoiceId);
+      await _client
+          .from('invoices')
+          .update({
+            'invoice_number': invoiceNumber,
+            'invoice_date': invoiceDate,
+            'subtotal': _round2(subtotal),
+            'discount': _round2(discount),
+            'taxable_amount': taxableAmount,
+            'sales_tax': _round2(salesTax),
+            'other_taxes': _round2(otherTaxes),
+            'total_amount': _round2(totalAmount),
+            'calculation_mismatch': calculationMismatch,
+            'verification_status': 'verified',
+            'verified_by': _client.auth.currentUser!.id,
+            'verified_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', invoiceId);
 
       return const Result.ok(null);
     } on SocketException {
@@ -88,4 +102,57 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
   }
 
   double _round2(double value) => (value * 100).round() / 100;
+
+  @override
+  Future<Result<Map<String, dynamic>>> getCanonicalJson(
+    String invoiceId,
+  ) async {
+    try {
+      final result = await _client.rpc(
+        'get_canonical_invoice_json',
+        params: {'p_invoice_id': invoiceId},
+      );
+      return Result.ok((result as Map).cast<String, dynamic>());
+    } on SocketException {
+      return const Result.err(NetworkFailure());
+    } on PostgrestException catch (e) {
+      return Result.err(ServerFailure(e.message));
+    } catch (_) {
+      return const Result.err(UnknownFailure());
+    }
+  }
+
+  @override
+  Future<Result<void>> deleteInvoice(String invoiceId) async {
+    try {
+      final invoice = await _client
+          .from('invoices')
+          .select('documents(storage_path, page_count)')
+          .eq('id', invoiceId)
+          .maybeSingle();
+      final document = invoice?['documents'] as Map<String, dynamic>?;
+      final storagePath = document?['storage_path'] as String?;
+      final pageCount = (document?['page_count'] as num?)?.toInt() ?? 0;
+
+      if (storagePath != null && storagePath.isNotEmpty && pageCount > 0) {
+        try {
+          await _client.storage.from('documents').remove([
+            for (var i = 1; i <= pageCount; i++) '$storagePath/page_$i.jpg',
+          ]);
+        } on StorageException {
+          // Best-effort: an orphaned storage object is recoverable later;
+          // leaving the DB row behind because of a storage hiccup isn't.
+        }
+      }
+
+      await _client.rpc('delete_invoice', params: {'p_invoice_id': invoiceId});
+      return const Result.ok(null);
+    } on SocketException {
+      return const Result.err(NetworkFailure());
+    } on PostgrestException catch (e) {
+      return Result.err(ServerFailure(e.message));
+    } catch (_) {
+      return const Result.err(UnknownFailure());
+    }
+  }
 }

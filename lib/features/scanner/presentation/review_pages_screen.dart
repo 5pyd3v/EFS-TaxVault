@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:fbr_taxvault/core/router/app_routes.dart';
@@ -20,11 +21,14 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
   DocumentType _documentType = DocumentType.invoice;
 
   Future<void> _save() async {
+    HapticFeedback.lightImpact();
     final organization = ref.read(currentOrganizationProvider);
     if (organization == null) return;
 
     final router = GoRouter.of(context);
-    final documentId = await ref.read(scannerControllerProvider.notifier).confirmUpload(
+    final documentId = await ref
+        .read(scannerControllerProvider.notifier)
+        .confirmUpload(
           organizationId: organization.id,
           documentType: _documentType,
         );
@@ -42,7 +46,8 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
     final controller = ref.read(scannerControllerProvider.notifier);
 
     ref.listen(scannerControllerProvider, (previous, next) {
-      if (next.errorMessage != null && next.errorMessage != previous?.errorMessage) {
+      if (next.errorMessage != null &&
+          next.errorMessage != previous?.errorMessage) {
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
           ..showSnackBar(SnackBar(content: Text(next.errorMessage!)));
@@ -51,7 +56,9 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Review (${state.pages.length} page${state.pages.length == 1 ? '' : 's'})'),
+        title: Text(
+          'Review (${state.pages.length} page${state.pages.length == 1 ? '' : 's'})',
+        ),
         actions: [
           TextButton(
             onPressed: state.isUploading
@@ -97,10 +104,17 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
                         ),
                       ),
                       const SizedBox(width: AppSpacing.md),
-                      Expanded(child: Text('Page ${index + 1}', style: theme.textTheme.bodyMedium)),
+                      Expanded(
+                        child: Text(
+                          'Page ${index + 1}',
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                      ),
                       IconButton(
                         icon: const Icon(Icons.delete_outline),
-                        onPressed: state.isUploading ? null : () => controller.removePage(page.id),
+                        onPressed: state.isUploading
+                            ? null
+                            : () => controller.removePage(page.id),
                       ),
                       const Icon(Icons.drag_handle),
                     ],
@@ -118,7 +132,9 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
                 children: [
                   Expanded(
                     child: OutlinedButton.icon(
-                      onPressed: state.isUploading ? null : controller.scanDocument,
+                      onPressed: state.isUploading
+                          ? null
+                          : controller.scanDocument,
                       icon: const Icon(Icons.add_a_photo_outlined),
                       label: const Text('Add page'),
                     ),
@@ -129,11 +145,18 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
                       initialValue: _documentType,
                       decoration: const InputDecoration(labelText: 'Type'),
                       items: DocumentType.values
-                          .map((t) => DropdownMenuItem(value: t, child: Text(_label(t))))
+                          .map(
+                            (t) => DropdownMenuItem(
+                              value: t,
+                              child: Text(_label(t)),
+                            ),
+                          )
                           .toList(),
                       onChanged: state.isUploading
                           ? null
-                          : (value) => setState(() => _documentType = value ?? _documentType),
+                          : (value) => setState(
+                              () => _documentType = value ?? _documentType,
+                            ),
                     ),
                   ),
                 ],
@@ -141,7 +164,9 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
               const SizedBox(height: AppSpacing.lg),
               if (state.isUploading) ...[
                 LinearProgressIndicator(
-                  value: state.pages.isEmpty ? null : state.uploadedPages / state.pages.length,
+                  value: state.pages.isEmpty
+                      ? null
+                      : state.uploadedPages / state.pages.length,
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 Text(
@@ -153,7 +178,9 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: state.isUploading || state.pages.isEmpty ? null : _save,
+                  onPressed: state.isUploading || state.pages.isEmpty
+                      ? null
+                      : _save,
                   child: const Text('Save to Vault'),
                 ),
               ),

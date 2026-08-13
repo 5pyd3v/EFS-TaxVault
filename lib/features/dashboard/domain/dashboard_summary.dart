@@ -18,18 +18,20 @@ class DashboardSummary {
   final int potentialIssues;
 
   factory DashboardSummary.empty() => const DashboardSummary(
-        totalInvoices: 0,
-        currentMonthInvoices: 0,
-        currentMonthTaxAmount: 0,
-        pendingVerification: 0,
-        potentialIssues: 0,
-      );
+    totalInvoices: 0,
+    currentMonthInvoices: 0,
+    currentMonthTaxAmount: 0,
+    pendingVerification: 0,
+    potentialIssues: 0,
+  );
 
   factory DashboardSummary.fromMap(Map<String, dynamic> map) {
     return DashboardSummary(
       totalInvoices: (map['total_invoices'] as num?)?.toInt() ?? 0,
-      currentMonthInvoices: (map['current_month_invoices'] as num?)?.toInt() ?? 0,
-      currentMonthTaxAmount: (map['current_month_tax_amount'] as num?)?.toDouble() ?? 0,
+      currentMonthInvoices:
+          (map['current_month_invoices'] as num?)?.toInt() ?? 0,
+      currentMonthTaxAmount:
+          (map['current_month_tax_amount'] as num?)?.toDouble() ?? 0,
       pendingVerification: (map['pending_verification'] as num?)?.toInt() ?? 0,
       potentialIssues: (map['potential_issues'] as num?)?.toInt() ?? 0,
     );

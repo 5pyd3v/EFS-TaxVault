@@ -15,7 +15,10 @@ class DashboardRepositoryImpl implements DashboardRepository {
   Future<Result<DashboardSummary>> getSummary(String organizationId) async {
     try {
       final row = await _client
-          .rpc('get_dashboard_summary', params: {'p_organization_id': organizationId})
+          .rpc(
+            'get_dashboard_summary',
+            params: {'p_organization_id': organizationId},
+          )
           .single();
       return Result.ok(DashboardSummary.fromMap(row));
     } on SocketException {

@@ -13,11 +13,15 @@ abstract interface class ImageCompressionService {
 class ImageCompressionServiceImpl implements ImageCompressionService {
   @override
   Future<Uint8List> compress(String filePath) async {
+    // Invoice numbers, dates, and tax lines are often small print — the
+    // exact detail JPEG quality and downscaling destroy first. Biased
+    // toward preserving legibility over upload size: AI extraction
+    // accuracy depends directly on what Gemini can actually read here.
     final compressed = await FlutterImageCompress.compressWithFile(
       filePath,
-      quality: 82,
-      minWidth: 1600,
-      minHeight: 1600,
+      quality: 92,
+      minWidth: 2200,
+      minHeight: 2200,
       format: CompressFormat.jpeg,
     );
     if (compressed != null) return compressed;

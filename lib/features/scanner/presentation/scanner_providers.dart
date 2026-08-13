@@ -6,10 +6,13 @@ import 'package:fbr_taxvault/features/scanner/data/scanner_service_impl.dart';
 import 'package:fbr_taxvault/features/scanner/domain/document_repository.dart';
 import 'package:fbr_taxvault/features/scanner/domain/scanner_service.dart';
 
-final scannerServiceProvider = Provider<ScannerService>((ref) => ScannerServiceImpl());
+final scannerServiceProvider = Provider<ScannerService>(
+  (ref) => ScannerServiceImpl(),
+);
 
-final imageCompressionServiceProvider =
-    Provider<ImageCompressionService>((ref) => ImageCompressionServiceImpl());
+final imageCompressionServiceProvider = Provider<ImageCompressionService>(
+  (ref) => ImageCompressionServiceImpl(),
+);
 
 final documentRepositoryProvider = Provider<DocumentRepository>((ref) {
   return DocumentRepositoryImpl(

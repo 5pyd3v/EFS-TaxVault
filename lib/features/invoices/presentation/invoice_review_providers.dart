@@ -8,7 +8,12 @@ final invoiceRepositoryProvider = Provider<InvoiceRepository>((ref) {
   return InvoiceRepositoryImpl(ref.watch(supabaseClientProvider));
 });
 
-final invoiceDetailProvider = FutureProvider.family<InvoiceDetail, String>((ref, invoiceId) async {
-  final result = await ref.watch(invoiceRepositoryProvider).getInvoiceDetail(invoiceId);
+final invoiceDetailProvider = FutureProvider.family<InvoiceDetail, String>((
+  ref,
+  invoiceId,
+) async {
+  final result = await ref
+      .watch(invoiceRepositoryProvider)
+      .getInvoiceDetail(invoiceId);
   return result.fold((detail) => detail, (failure) => throw failure);
 });

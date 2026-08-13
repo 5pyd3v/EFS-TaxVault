@@ -59,32 +59,42 @@ class DocumentRepositoryImpl implements DocumentRepository {
         documentHash ??= sha256.convert(bytes).toString();
         totalBytes += bytes.length;
 
-        await _client.storage.from(_bucket).uploadBinary(
+        await _client.storage
+            .from(_bucket)
+            .uploadBinary(
               '$storagePrefix/page_${i + 1}.jpg',
               bytes,
-              fileOptions: const FileOptions(contentType: 'image/jpeg', upsert: true),
+              fileOptions: const FileOptions(
+                contentType: 'image/jpeg',
+                upsert: true,
+              ),
             );
         onProgress?.call(i + 1, pages.length);
       }
 
-      await _client.from('documents').update({
-        'storage_path': storagePrefix,
-        'document_hash': documentHash,
-        'file_size_bytes': totalBytes,
-      }).eq('id', documentId);
+      await _client
+          .from('documents')
+          .update({
+            'storage_path': storagePrefix,
+            'document_hash': documentHash,
+            'file_size_bytes': totalBytes,
+          })
+          .eq('id', documentId);
 
       // No client-side ai_processing_jobs row here on purpose: that table
       // is service-role-write-only (spec §7 — AI requests are server-side
       // only), and the extract-invoice Edge Function creates its own job
       // row if one doesn't already exist when it's invoked next.
 
-      return Result.ok(Document(
-        id: documentId,
-        organizationId: organizationId,
-        storagePathPrefix: storagePrefix,
-        pageCount: pages.length,
-        documentType: documentType,
-      ));
+      return Result.ok(
+        Document(
+          id: documentId,
+          organizationId: organizationId,
+          storagePathPrefix: storagePrefix,
+          pageCount: pages.length,
+          documentType: documentType,
+        ),
+      );
     } on SocketException {
       return const Result.err(NetworkFailure());
     } on StorageException catch (e) {

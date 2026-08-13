@@ -29,7 +29,9 @@ class AuthRepositoryImpl implements AuthRepository {
       final user = _mapUser(response.user);
       if (user == null) {
         return const Result.err(
-          AuthFailure('Account created. Please check your email to confirm before signing in.'),
+          AuthFailure(
+            'Account created. Please check your email to confirm before signing in.',
+          ),
         );
       }
       return Result.ok(user);

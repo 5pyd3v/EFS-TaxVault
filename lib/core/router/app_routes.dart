@@ -13,7 +13,9 @@ abstract final class AppRoutes {
   static const invoiceReviewPattern = '/invoices/:invoiceId/review';
   static const reports = '/reports';
   static const profile = '/profile';
+  static const notifications = '/notifications';
 
   static String processing(String documentId) => '/scan/processing/$documentId';
-  static String invoiceReview(String invoiceId) => '/invoices/$invoiceId/review';
+  static String invoiceReview(String invoiceId) =>
+      '/invoices/$invoiceId/review';
 }

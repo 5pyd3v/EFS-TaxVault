@@ -34,8 +34,11 @@ class InvoiceSummary {
       invoiceDate: dateString != null ? DateTime.tryParse(dateString) : null,
       totalAmount: (map['total_amount'] as num?)?.toDouble() ?? 0,
       currency: map['currency'] as String? ?? 'PKR',
-      documentType: DocumentType.fromValue(map['document_type'] as String? ?? 'other'),
-      verificationStatus: map['verification_status'] as String? ?? 'needs_review',
+      documentType: DocumentType.fromValue(
+        map['document_type'] as String? ?? 'other',
+      ),
+      verificationStatus:
+          map['verification_status'] as String? ?? 'needs_review',
     );
   }
 }

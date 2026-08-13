@@ -26,9 +26,16 @@ class BackendNotConfiguredApp extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.dns_outlined, size: 40, color: Theme.of(context).colorScheme.primary),
+                  Icon(
+                    Icons.dns_outlined,
+                    size: 40,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
                   const SizedBox(height: AppSpacing.xl),
-                  Text('Backend not configured', style: Theme.of(context).textTheme.headlineSmall),
+                  Text(
+                    'Backend not configured',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
                   const SizedBox(height: AppSpacing.md),
                   Text(
                     'Run the app with your Supabase project credentials:\n\n'
@@ -37,8 +44,8 @@ class BackendNotConfiguredApp extends StatelessWidget {
                     '  --dart-define=SUPABASE_ANON_KEY=xxxx',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ),

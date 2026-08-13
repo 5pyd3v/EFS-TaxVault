@@ -12,7 +12,10 @@ class AiProcessingRepositoryImpl implements AiProcessingRepository {
   final SupabaseClient _client;
 
   @override
-  Future<Result<ExtractionOutcome>> extractInvoice(String documentId, {bool force = false}) async {
+  Future<Result<ExtractionOutcome>> extractInvoice(
+    String documentId, {
+    bool force = false,
+  }) async {
     try {
       final response = await _client.functions.invoke(
         'extract-invoice',
@@ -20,17 +23,22 @@ class AiProcessingRepositoryImpl implements AiProcessingRepository {
       );
       final data = response.data;
       if (data is Map && data['duplicate'] == true) {
-        return Result.ok(ExtractionDuplicate(
-          existingInvoiceId: data['existing_invoice_id'] as String,
-          existingInvoiceNumber: data['existing_invoice_number'] as String?,
-          existingTotalAmount: (data['existing_total_amount'] as num?)?.toDouble(),
-        ));
+        return Result.ok(
+          ExtractionDuplicate(
+            existingInvoiceId: data['existing_invoice_id'] as String,
+            existingInvoiceNumber: data['existing_invoice_number'] as String?,
+            existingTotalAmount: (data['existing_total_amount'] as num?)
+                ?.toDouble(),
+          ),
+        );
       }
       if (data is Map && data['invoice_id'] is String) {
         return Result.ok(ExtractionSuccess(data['invoice_id'] as String));
       }
       return const Result.err(
-        ServerFailure('The document was saved, but analysis did not return a result.'),
+        ServerFailure(
+          'The document was saved, but analysis did not return a result.',
+        ),
       );
     } on FunctionException catch (e) {
       final details = e.details;

@@ -17,7 +17,8 @@ class ScannerException implements Exception {
 }
 
 class ScannerServiceImpl implements ScannerService {
-  ScannerServiceImpl({ImagePicker? imagePicker}) : _imagePicker = imagePicker ?? ImagePicker();
+  ScannerServiceImpl({ImagePicker? imagePicker})
+    : _imagePicker = imagePicker ?? ImagePicker();
 
   final ImagePicker _imagePicker;
 
@@ -26,7 +27,9 @@ class ScannerServiceImpl implements ScannerService {
     try {
       final paths = await DocumentScanner.scan(format: DocScanFormat.jpeg);
       if (paths == null || paths.isEmpty) return const [];
-      return paths.map((path) => ScannedPage(id: path, localPath: path)).toList();
+      return paths
+          .map((path) => ScannedPage(id: path, localPath: path))
+          .toList();
     } on DocumentScannerException catch (e) {
       throw ScannerException(e.message);
     }
@@ -35,6 +38,8 @@ class ScannerServiceImpl implements ScannerService {
   @override
   Future<List<ScannedPage>> pickFromGallery() async {
     final files = await _imagePicker.pickMultiImage(imageQuality: 90);
-    return files.map((f) => ScannedPage(id: f.path, localPath: f.path)).toList();
+    return files
+        .map((f) => ScannedPage(id: f.path, localPath: f.path))
+        .toList();
   }
 }

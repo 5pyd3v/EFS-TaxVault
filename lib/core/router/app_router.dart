@@ -10,6 +10,7 @@ import 'package:fbr_taxvault/features/auth/presentation/sign_up_screen.dart';
 import 'package:fbr_taxvault/features/ai/presentation/processing_screen.dart';
 import 'package:fbr_taxvault/features/dashboard/presentation/dashboard_screen.dart';
 import 'package:fbr_taxvault/features/invoices/presentation/invoice_review_screen.dart';
+import 'package:fbr_taxvault/features/notifications/presentation/notifications_screen.dart';
 import 'package:fbr_taxvault/features/profile/presentation/profile_screen.dart';
 import 'package:fbr_taxvault/features/reports/presentation/reports_screen.dart';
 import 'package:fbr_taxvault/features/scanner/presentation/review_pages_screen.dart';
@@ -40,34 +41,72 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: AppRoutes.splash, builder: (_, _) => const SplashScreen()),
       GoRoute(path: AppRoutes.signIn, builder: (_, _) => const SignInScreen()),
       GoRoute(path: AppRoutes.signUp, builder: (_, _) => const SignUpScreen()),
-      GoRoute(path: AppRoutes.onboarding, builder: (_, _) => const OnboardingScreen()),
-      GoRoute(path: AppRoutes.scanReview, builder: (_, _) => const ReviewPagesScreen()),
+      GoRoute(
+        path: AppRoutes.onboarding,
+        builder: (_, _) => const OnboardingScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.scanReview,
+        builder: (_, _) => const ReviewPagesScreen(),
+      ),
       GoRoute(
         path: AppRoutes.processingPattern,
-        builder: (_, state) => ProcessingScreen(documentId: state.pathParameters['documentId']!),
+        builder: (_, state) =>
+            ProcessingScreen(documentId: state.pathParameters['documentId']!),
       ),
       GoRoute(
         path: AppRoutes.invoiceReviewPattern,
-        builder: (_, state) => InvoiceReviewScreen(invoiceId: state.pathParameters['invoiceId']!),
+        builder: (_, state) =>
+            InvoiceReviewScreen(invoiceId: state.pathParameters['invoiceId']!),
+      ),
+      GoRoute(
+        path: AppRoutes.notifications,
+        builder: (_, _) => const NotificationsScreen(),
       ),
       StatefulShellRoute.indexedStack(
-        builder: (context, state, navigationShell) => AppShell(navigationShell: navigationShell),
+        builder: (context, state, navigationShell) =>
+            AppShell(navigationShell: navigationShell),
         branches: [
-          StatefulShellBranch(routes: [
-            GoRoute(path: AppRoutes.home, builder: (_, _) => const DashboardScreen()),
-          ]),
-          StatefulShellBranch(routes: [
-            GoRoute(path: AppRoutes.vault, builder: (_, _) => const VaultScreen()),
-          ]),
-          StatefulShellBranch(routes: [
-            GoRoute(path: AppRoutes.scan, builder: (_, _) => const ScannerScreen()),
-          ]),
-          StatefulShellBranch(routes: [
-            GoRoute(path: AppRoutes.reports, builder: (_, _) => const ReportsScreen()),
-          ]),
-          StatefulShellBranch(routes: [
-            GoRoute(path: AppRoutes.profile, builder: (_, _) => const ProfileScreen()),
-          ]),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: AppRoutes.home,
+                builder: (_, _) => const DashboardScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: AppRoutes.vault,
+                builder: (_, _) => const VaultScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: AppRoutes.scan,
+                builder: (_, _) => const ScannerScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: AppRoutes.reports,
+                builder: (_, _) => const ReportsScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: AppRoutes.profile,
+                builder: (_, _) => const ProfileScreen(),
+              ),
+            ],
+          ),
         ],
       ),
     ],
@@ -76,7 +115,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
 String? _redirect(Ref ref, GoRouterState state) {
   final atAuthScreen =
-      state.matchedLocation == AppRoutes.signIn || state.matchedLocation == AppRoutes.signUp;
+      state.matchedLocation == AppRoutes.signIn ||
+      state.matchedLocation == AppRoutes.signUp;
   final atSplash = state.matchedLocation == AppRoutes.splash;
   final atOnboarding = state.matchedLocation == AppRoutes.onboarding;
 

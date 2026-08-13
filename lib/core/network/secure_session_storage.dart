@@ -34,6 +34,9 @@ class SecureSessionStorage extends LocalStorage {
 
   @override
   Future<void> persistSession(String persistSessionString) {
-    return _secureStorage.write(key: persistSessionKey, value: persistSessionString);
+    return _secureStorage.write(
+      key: persistSessionKey,
+      value: persistSessionString,
+    );
   }
 }

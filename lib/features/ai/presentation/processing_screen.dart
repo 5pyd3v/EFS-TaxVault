@@ -7,7 +7,11 @@ import 'package:fbr_taxvault/core/theme/app_spacing.dart';
 import 'package:fbr_taxvault/features/ai/domain/extraction_outcome.dart';
 import 'package:fbr_taxvault/features/ai/presentation/ai_processing_providers.dart';
 
-final _currencyFormat = NumberFormat.currency(locale: 'en_US', symbol: 'Rs ', decimalDigits: 0);
+final _currencyFormat = NumberFormat.currency(
+  locale: 'en_US',
+  symbol: 'Rs ',
+  decimalDigits: 0,
+);
 
 /// Shown right after a document uploads, while the `extract-invoice` Edge
 /// Function runs. Deliberately a single honest "analyzing" state rather
@@ -70,7 +74,10 @@ class _ProcessingScreenState extends ConsumerState<ProcessingScreen> {
     return PopScope(
       canPop: !extraction.isLoading && !_isSavingAnyway,
       child: Scaffold(
-        appBar: AppBar(title: const Text('Analyzing'), automaticallyImplyLeading: false),
+        appBar: AppBar(
+          title: const Text('Analyzing'),
+          automaticallyImplyLeading: false,
+        ),
         body: Padding(
           padding: const EdgeInsets.all(AppSpacing.xxxl),
           child: Center(
@@ -78,20 +85,24 @@ class _ProcessingScreenState extends ConsumerState<ProcessingScreen> {
               data: (outcome) => switch (outcome) {
                 ExtractionSuccess() => const CircularProgressIndicator(),
                 ExtractionDuplicate() => _DuplicatePrompt(
-                    outcome: outcome,
-                    isSaving: _isSavingAnyway,
-                    error: _saveAnywayError,
-                    onViewExisting: () =>
-                        context.pushReplacement(AppRoutes.invoiceReview(outcome.existingInvoiceId)),
-                    onSaveAnyway: _saveAnyway,
+                  outcome: outcome,
+                  isSaving: _isSavingAnyway,
+                  error: _saveAnywayError,
+                  onViewExisting: () => context.pushReplacement(
+                    AppRoutes.invoiceReview(outcome.existingInvoiceId),
                   ),
+                  onSaveAnyway: _saveAnyway,
+                ),
               },
               loading: () => Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const CircularProgressIndicator(),
                   const SizedBox(height: AppSpacing.xxl),
-                  Text('Analyzing your invoice', style: theme.textTheme.titleMedium),
+                  Text(
+                    'Analyzing your invoice',
+                    style: theme.textTheme.titleMedium,
+                  ),
                   const SizedBox(height: AppSpacing.sm),
                   Text(
                     'Reading the document and checking the numbers — this can take a few seconds.',
@@ -105,7 +116,11 @@ class _ProcessingScreenState extends ConsumerState<ProcessingScreen> {
               error: (error, _) => Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.error_outline_rounded, size: 40, color: theme.colorScheme.error),
+                  Icon(
+                    Icons.error_outline_rounded,
+                    size: 40,
+                    color: theme.colorScheme.error,
+                  ),
                   const SizedBox(height: AppSpacing.xl),
                   Text('Analysis failed', style: theme.textTheme.titleMedium),
                   const SizedBox(height: AppSpacing.sm),
@@ -118,7 +133,8 @@ class _ProcessingScreenState extends ConsumerState<ProcessingScreen> {
                   ),
                   const SizedBox(height: AppSpacing.xxl),
                   ElevatedButton(
-                    onPressed: () => ref.invalidate(aiExtractionProvider(widget.documentId)),
+                    onPressed: () =>
+                        ref.invalidate(aiExtractionProvider(widget.documentId)),
                     child: const Text('Retry'),
                   ),
                   const SizedBox(height: AppSpacing.md),
@@ -157,16 +173,22 @@ class _DuplicatePrompt extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(Icons.content_copy_rounded, size: 36, color: theme.colorScheme.primary),
+        Icon(
+          Icons.content_copy_rounded,
+          size: 36,
+          color: theme.colorScheme.primary,
+        ),
         const SizedBox(height: AppSpacing.xl),
         Text('Possible duplicate', style: theme.textTheme.titleMedium),
         const SizedBox(height: AppSpacing.sm),
         Text(
           outcome.existingInvoiceNumber != null
               ? 'This looks like invoice #${outcome.existingInvoiceNumber} you already saved'
-                  '${outcome.existingTotalAmount != null ? ' (${_currencyFormat.format(outcome.existingTotalAmount)})' : ''}.'
+                    '${outcome.existingTotalAmount != null ? ' (${_currencyFormat.format(outcome.existingTotalAmount)})' : ''}.'
               : 'This looks like a document you already saved to your vault.',
-          style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: AppSpacing.xxl),
@@ -190,7 +212,10 @@ class _DuplicatePrompt extends StatelessWidget {
                 ? const SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
                   )
                 : const Text('Save anyway'),
           ),

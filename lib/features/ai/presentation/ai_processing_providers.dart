@@ -14,7 +14,12 @@ final aiProcessingRepositoryProvider = Provider<AiProcessingRepository>((ref) {
 /// is the only way to run it again. A "Save anyway" after a duplicate
 /// prompt calls the repository directly instead of going through this
 /// cached provider — see ProcessingScreen.
-final aiExtractionProvider = FutureProvider.family<ExtractionOutcome, String>((ref, documentId) async {
-  final result = await ref.watch(aiProcessingRepositoryProvider).extractInvoice(documentId);
+final aiExtractionProvider = FutureProvider.family<ExtractionOutcome, String>((
+  ref,
+  documentId,
+) async {
+  final result = await ref
+      .watch(aiProcessingRepositoryProvider)
+      .extractInvoice(documentId);
   return result.fold((outcome) => outcome, (failure) => throw failure);
 });

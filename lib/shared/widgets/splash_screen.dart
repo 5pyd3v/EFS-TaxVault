@@ -21,7 +21,11 @@ class SplashScreen extends StatelessWidget {
                 color: AppTheme.brandTint(theme.brightness == Brightness.dark),
                 borderRadius: BorderRadius.circular(18),
               ),
-              child: Icon(Icons.shield_outlined, color: theme.colorScheme.primary, size: 30),
+              child: Icon(
+                Icons.shield_outlined,
+                color: theme.colorScheme.primary,
+                size: 30,
+              ),
             ),
             const SizedBox(height: AppSpacing.xl),
             Text(AppConstants.appName, style: theme.textTheme.headlineSmall),

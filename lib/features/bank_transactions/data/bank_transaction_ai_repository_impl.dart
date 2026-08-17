@@ -44,9 +44,14 @@ class BankTransactionAiRepositoryImpl implements BankTransactionAiRepository {
       );
     } on FunctionException catch (e) {
       final details = e.details;
-      final message = (details is Map && details['error'] is String)
-          ? details['error'] as String
-          : 'Could not analyze this document. Please try again.';
+      final code = details is Map ? details['error'] as String? : null;
+      if (code == 'no_api_key' || code == 'quota_exceeded' || code == 'invalid_key') {
+        final message = (details is Map && details['message'] is String)
+            ? details['message'] as String
+            : 'Please update your Gemini API key in Profile.';
+        return Result.ok(BankTransactionExtractionKeyError(code!, message));
+      }
+      final message = code ?? 'Could not analyze this document. Please try again.';
       return Result.err(ServerFailure(message));
     } on SocketException {
       return const Result.err(NetworkFailure());

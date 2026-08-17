@@ -2,11 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:fbr_taxvault/core/router/app_routes.dart';
 import 'package:fbr_taxvault/core/theme/app_semantic_colors.dart';
 import 'package:fbr_taxvault/core/theme/app_spacing.dart';
-import 'package:fbr_taxvault/features/auth/presentation/auth_providers.dart';
 import 'package:fbr_taxvault/features/bank_transactions/domain/bank_transaction_summary.dart';
 import 'package:fbr_taxvault/features/bank_transactions/presentation/bank_transaction_providers.dart';
 import 'package:fbr_taxvault/shared/widgets/app_card.dart';
@@ -21,26 +19,27 @@ final _currencyFormat = NumberFormat.currency(
 );
 final _dateFormat = DateFormat('d MMM yyyy');
 
-/// The "separate view" for bank/wallet transaction receipts — deliberately
-/// its own screen, not mixed into the Vault invoices list, reached from a
-/// link on Profile.
-class BankTransactionsScreen extends ConsumerStatefulWidget {
-  const BankTransactionsScreen({super.key});
+/// The Bank Transactions segment of Vault — search field + list, with the
+/// same swipe-to-delete `AppCard` rows as the Documents segment. Deliberately
+/// has no `Scaffold`/`AppBar` of its own: it's embedded directly inside
+/// `VaultScreen`, which owns the segmented toggle and AppBar actions.
+class BankTransactionsListView extends ConsumerStatefulWidget {
+  const BankTransactionsListView({super.key});
 
   @override
-  ConsumerState<BankTransactionsScreen> createState() =>
-      _BankTransactionsScreenState();
+  ConsumerState<BankTransactionsListView> createState() =>
+      _BankTransactionsListViewState();
 }
 
-class _BankTransactionsScreenState
-    extends ConsumerState<BankTransactionsScreen> {
+class _BankTransactionsListViewState
+    extends ConsumerState<BankTransactionsListView> {
   final _scrollController = ScrollController();
   final _searchController = TextEditingController();
-  bool _isExporting = false;
 
   @override
   void initState() {
     super.initState();
+    _searchController.text = ref.read(bankTransactionsControllerProvider).searchQuery;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(bankTransactionsControllerProvider.notifier).refresh();
     });
@@ -59,100 +58,50 @@ class _BankTransactionsScreenState
     super.dispose();
   }
 
-  Future<void> _exportToExcel() async {
-    final organization = ref.read(currentOrganizationProvider);
-    if (organization == null || _isExporting) return;
-
-    setState(() => _isExporting = true);
-    final result = await ref
-        .read(bankTransactionExportServiceProvider)
-        .exportToExcel(organization.id);
-
-    if (!mounted) return;
-    setState(() => _isExporting = false);
-
-    result.fold(
-      (file) {
-        SharePlus.instance.share(
-          ShareParams(
-            files: [
-              XFile(
-                file.path,
-                mimeType:
-                    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-              ),
-            ],
-            subject: 'EFS TaxVault — Bank Transactions',
-            text: 'Your bank transactions report is attached.',
-          ),
-        );
-      },
-      (failure) {
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(SnackBar(content: Text(failure.message)));
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final state = ref.watch(bankTransactionsControllerProvider);
     final controller = ref.read(bankTransactionsControllerProvider.notifier);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Bank Transactions'),
-        actions: [
-          IconButton(
-            icon: _isExporting
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.ios_share_rounded),
-            tooltip: 'Export to Excel',
-            onPressed: _isExporting ? null : _exportToExcel,
+    if (_searchController.text != state.searchQuery) {
+      _searchController.text = state.searchQuery;
+    }
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg,
+            0,
+            AppSpacing.lg,
+            AppSpacing.md,
           ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.lg,
-              AppSpacing.md,
-              AppSpacing.lg,
-              AppSpacing.md,
-            ),
-            child: TextField(
-              controller: _searchController,
-              onChanged: controller.setSearchQuery,
-              decoration: InputDecoration(
-                hintText: 'Search counterparty, bank, or reference',
-                prefixIcon: const Icon(Icons.search_rounded, size: 20),
-                suffixIcon: state.searchQuery.isEmpty
-                    ? null
-                    : IconButton(
-                        icon: const Icon(Icons.close_rounded, size: 18),
-                        onPressed: () {
-                          _searchController.clear();
-                          controller.setSearchQuery('');
-                        },
-                      ),
-              ),
+          child: TextField(
+            controller: _searchController,
+            onChanged: controller.setSearchQuery,
+            decoration: InputDecoration(
+              hintText: 'Search counterparty, bank, or reference',
+              prefixIcon: const Icon(Icons.search_rounded, size: 20),
+              suffixIcon: state.searchQuery.isEmpty
+                  ? null
+                  : IconButton(
+                      icon: const Icon(Icons.close_rounded, size: 18),
+                      onPressed: () {
+                        _searchController.clear();
+                        controller.setSearchQuery('');
+                      },
+                    ),
             ),
           ),
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: controller.refresh,
-              child: _buildBody(theme, state),
-            ),
+        ),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: controller.refresh,
+            child: _buildBody(theme, state),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 

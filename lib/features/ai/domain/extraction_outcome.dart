@@ -22,3 +22,15 @@ class ExtractionDuplicate extends ExtractionOutcome {
   final String? existingInvoiceNumber;
   final double? existingTotalAmount;
 }
+
+/// The org's Gemini API key is missing, exhausted, or rejected —
+/// `code` is one of `no_api_key` / `quota_exceeded` / `invalid_key`, set by
+/// the Edge Function. Not a generic failure: the fix is always "go update
+/// the key in Profile", so the UI shows a dedicated prompt with that action
+/// rather than a plain error message.
+class ExtractionKeyError extends ExtractionOutcome {
+  const ExtractionKeyError(this.code, this.message);
+
+  final String code;
+  final String message;
+}

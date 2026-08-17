@@ -93,6 +93,7 @@ class _ProcessingScreenState extends ConsumerState<ProcessingScreen> {
                   ),
                   onSaveAnyway: _saveAnyway,
                 ),
+                ExtractionKeyError() => _KeyErrorPrompt(outcome: outcome),
               },
               loading: () => Column(
                 mainAxisSize: MainAxisSize.min,
@@ -148,6 +149,53 @@ class _ProcessingScreenState extends ConsumerState<ProcessingScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Shown when the org's Gemini key is missing/exhausted/invalid — the fix
+/// is always "go update the key", so this replaces the generic error view
+/// with a direct link to AI Key Settings instead of just a Retry button.
+class _KeyErrorPrompt extends StatelessWidget {
+  const _KeyErrorPrompt({required this.outcome});
+
+  final ExtractionKeyError outcome;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          Icons.key_off_outlined,
+          size: 40,
+          color: theme.colorScheme.error,
+        ),
+        const SizedBox(height: AppSpacing.xl),
+        Text('API key needs attention', style: theme.textTheme.titleMedium),
+        const SizedBox(height: AppSpacing.sm),
+        Text(
+          outcome.message,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: AppSpacing.xxl),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: () => context.push(AppRoutes.aiKeySettings),
+            child: const Text('Update API Key'),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.md),
+        TextButton(
+          onPressed: () => context.go(AppRoutes.home),
+          child: const Text('Back to Home'),
+        ),
+      ],
     );
   }
 }

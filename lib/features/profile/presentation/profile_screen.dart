@@ -5,6 +5,7 @@ import 'package:fbr_taxvault/core/constants/app_constants.dart';
 import 'package:fbr_taxvault/core/router/app_routes.dart';
 import 'package:fbr_taxvault/core/theme/app_gradients.dart';
 import 'package:fbr_taxvault/core/theme/app_spacing.dart';
+import 'package:fbr_taxvault/features/ai_key/presentation/ai_key_providers.dart';
 import 'package:fbr_taxvault/features/auth/presentation/auth_controller.dart';
 import 'package:fbr_taxvault/features/auth/presentation/auth_providers.dart';
 import 'package:fbr_taxvault/features/notifications/presentation/notifications_providers.dart';
@@ -22,6 +23,10 @@ class ProfileScreen extends ConsumerWidget {
     final authState = ref.watch(authControllerProvider);
     final unreadAsync = ref.watch(unreadNotificationsCountProvider);
     final unreadCount = unreadAsync.valueOrNull ?? 0;
+    final keyStatusAsync = organization == null
+        ? null
+        : ref.watch(geminiKeyStatusProvider(organization.id));
+    final keyStatus = keyStatusAsync?.valueOrNull;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Profile')),
@@ -110,11 +115,11 @@ class ProfileScreen extends ConsumerWidget {
                 onTap: () => context.push(AppRoutes.notifications),
               ),
               _SettingsTile(
-                icon: Icons.account_balance_wallet_outlined,
-                iconColorKey: 'bank_transactions',
-                title: 'Bank Transactions',
-                subtitle: 'Scan and track payment receipts',
-                onTap: () => context.push(AppRoutes.bankTransactions),
+                icon: Icons.vpn_key_outlined,
+                iconColorKey: 'ai_key',
+                title: 'Gemini API Key',
+                subtitle: keyStatus?.statusLabel ?? 'Checking...',
+                onTap: () => context.push(AppRoutes.aiKeySettings),
               ),
             ],
           ),

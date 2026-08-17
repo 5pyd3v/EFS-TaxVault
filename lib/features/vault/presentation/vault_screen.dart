@@ -2,13 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:fbr_taxvault/core/router/app_routes.dart';
 import 'package:fbr_taxvault/core/theme/app_semantic_colors.dart';
 import 'package:fbr_taxvault/core/theme/app_spacing.dart';
+import 'package:fbr_taxvault/features/auth/presentation/auth_providers.dart';
+import 'package:fbr_taxvault/features/bank_transactions/presentation/bank_transaction_list_view.dart';
+import 'package:fbr_taxvault/features/bank_transactions/presentation/bank_transaction_providers.dart';
 import 'package:fbr_taxvault/features/invoices/presentation/invoice_review_providers.dart';
 import 'package:fbr_taxvault/features/vault/domain/invoice_summary.dart';
 import 'package:fbr_taxvault/features/vault/domain/vault_filter.dart';
 import 'package:fbr_taxvault/features/vault/presentation/vault_controller.dart';
+import 'package:fbr_taxvault/features/vault/presentation/vault_providers.dart';
 import 'package:fbr_taxvault/shared/domain/document_type.dart';
 import 'package:fbr_taxvault/shared/providers/invoice_mutation_effects.dart';
 import 'package:fbr_taxvault/shared/widgets/app_card.dart';
@@ -33,6 +38,43 @@ class VaultScreen extends ConsumerStatefulWidget {
 class _VaultScreenState extends ConsumerState<VaultScreen> {
   final _scrollController = ScrollController();
   final _searchController = TextEditingController();
+  bool _isExportingTransactions = false;
+
+  Future<void> _exportBankTransactionsToExcel() async {
+    final organization = ref.read(currentOrganizationProvider);
+    if (organization == null || _isExportingTransactions) return;
+
+    setState(() => _isExportingTransactions = true);
+    final result = await ref
+        .read(bankTransactionExportServiceProvider)
+        .exportToExcel(organization.id);
+
+    if (!mounted) return;
+    setState(() => _isExportingTransactions = false);
+
+    result.fold(
+      (file) {
+        SharePlus.instance.share(
+          ShareParams(
+            files: [
+              XFile(
+                file.path,
+                mimeType:
+                    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+              ),
+            ],
+            subject: 'EFS TaxVault — Bank Transactions',
+            text: 'Your bank transactions report is attached.',
+          ),
+        );
+      },
+      (failure) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(failure.message)));
+      },
+    );
+  }
 
   @override
   void initState() {
@@ -64,6 +106,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
     final theme = Theme.of(context);
     final state = ref.watch(vaultControllerProvider);
     final controller = ref.read(vaultControllerProvider.notifier);
+    final view = ref.watch(selectedVaultViewProvider);
 
     // Reports' period/supplier cards set the search/period filter before
     // navigating here — this screen lives inside the bottom-nav shell's
@@ -77,16 +120,32 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
       appBar: AppBar(
         title: const Text('Vault'),
         actions: [
-          PopupMenuButton<VaultSort>(
-            initialValue: state.sort,
-            onSelected: controller.setSort,
-            icon: const Icon(Icons.sort_rounded),
-            itemBuilder: (context) => VaultSort.values
-                .map(
-                  (sort) => PopupMenuItem(value: sort, child: Text(sort.label)),
-                )
-                .toList(),
-          ),
+          if (view == VaultView.documents)
+            PopupMenuButton<VaultSort>(
+              initialValue: state.sort,
+              onSelected: controller.setSort,
+              icon: const Icon(Icons.sort_rounded),
+              itemBuilder: (context) => VaultSort.values
+                  .map(
+                    (sort) =>
+                        PopupMenuItem(value: sort, child: Text(sort.label)),
+                  )
+                  .toList(),
+            )
+          else
+            IconButton(
+              icon: _isExportingTransactions
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.ios_share_rounded),
+              tooltip: 'Export to Excel',
+              onPressed: _isExportingTransactions
+                  ? null
+                  : _exportBankTransactionsToExcel,
+            ),
         ],
       ),
       body: Column(
@@ -98,67 +157,107 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
               AppSpacing.lg,
               AppSpacing.md,
             ),
-            child: TextField(
-              controller: _searchController,
-              onChanged: controller.setSearchQuery,
-              decoration: InputDecoration(
-                hintText: 'Search invoice number or supplier',
-                prefixIcon: const Icon(Icons.search_rounded, size: 20),
-                suffixIcon: state.searchQuery.isEmpty
-                    ? null
-                    : IconButton(
-                        icon: const Icon(Icons.close_rounded, size: 18),
-                        onPressed: () {
-                          _searchController.clear();
-                          controller.setSearchQuery('');
-                        },
-                      ),
-              ),
-            ),
-          ),
-          if (state.periodLabel != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.lg,
-                0,
-                AppSpacing.lg,
-                AppSpacing.md,
-              ),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: InputChip(
-                  avatar: const Icon(Icons.calendar_month_rounded, size: 16),
-                  label: Text('Period: ${state.periodLabel}'),
-                  onDeleted: controller.clearPeriodFilter,
+            child: SegmentedButton<VaultView>(
+              segments: const [
+                ButtonSegment(
+                  value: VaultView.documents,
+                  label: Text('Documents'),
                 ),
-              ),
-            ),
-          SizedBox(
-            height: 44,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-              itemCount: VaultFilter.values.length,
-              separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.sm),
-              itemBuilder: (context, index) {
-                final filter = VaultFilter.values[index];
-                return ChoiceChip(
-                  label: Text(filter.label),
-                  selected: state.filter == filter,
-                  onSelected: (_) => controller.setFilter(filter),
-                );
-              },
+                ButtonSegment(
+                  value: VaultView.bankTransactions,
+                  label: Text('Bank Transactions'),
+                ),
+              ],
+              selected: {view},
+              onSelectionChanged: (selection) =>
+                  ref.read(selectedVaultViewProvider.notifier).state =
+                      selection.first,
             ),
           ),
-          const Divider(height: 1),
           Expanded(
-            child: RefreshIndicator(
-              onRefresh: controller.refresh,
-              child: _buildBody(theme, state),
-            ),
+            child: view == VaultView.documents
+                ? _buildDocumentsView(theme, state, controller)
+                : const BankTransactionsListView(),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildDocumentsView(
+    ThemeData theme,
+    VaultState state,
+    VaultController controller,
+  ) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg,
+            0,
+            AppSpacing.lg,
+            AppSpacing.md,
+          ),
+          child: TextField(
+            controller: _searchController,
+            onChanged: controller.setSearchQuery,
+            decoration: InputDecoration(
+              hintText: 'Search invoice number or supplier',
+              prefixIcon: const Icon(Icons.search_rounded, size: 20),
+              suffixIcon: state.searchQuery.isEmpty
+                  ? null
+                  : IconButton(
+                      icon: const Icon(Icons.close_rounded, size: 18),
+                      onPressed: () {
+                        _searchController.clear();
+                        controller.setSearchQuery('');
+                      },
+                    ),
+            ),
+          ),
+        ),
+        if (state.periodLabel != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              0,
+              AppSpacing.lg,
+              AppSpacing.md,
+            ),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: InputChip(
+                avatar: const Icon(Icons.calendar_month_rounded, size: 16),
+                label: Text('Period: ${state.periodLabel}'),
+                onDeleted: controller.clearPeriodFilter,
+              ),
+            ),
+          ),
+        SizedBox(
+          height: 44,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+            itemCount: VaultFilter.values.length,
+            separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.sm),
+            itemBuilder: (context, index) {
+              final filter = VaultFilter.values[index];
+              return ChoiceChip(
+                label: Text(filter.label),
+                selected: state.filter == filter,
+                onSelected: (_) => controller.setFilter(filter),
+              );
+            },
+          ),
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: controller.refresh,
+            child: _buildBody(theme, state),
+          ),
+        ),
+      ],
     );
   }
 

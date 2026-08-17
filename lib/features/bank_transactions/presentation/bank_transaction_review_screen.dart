@@ -7,6 +7,7 @@ import 'package:fbr_taxvault/core/router/app_routes.dart';
 import 'package:fbr_taxvault/core/theme/app_spacing.dart';
 import 'package:fbr_taxvault/features/bank_transactions/domain/bank_transaction_detail.dart';
 import 'package:fbr_taxvault/features/bank_transactions/presentation/bank_transaction_providers.dart';
+import 'package:fbr_taxvault/features/vault/presentation/vault_providers.dart';
 import 'package:fbr_taxvault/shared/widgets/app_card.dart';
 import 'package:fbr_taxvault/shared/widgets/async_value_view.dart';
 
@@ -94,7 +95,9 @@ class _BankTransactionReviewScreenState
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
           ..showSnackBar(const SnackBar(content: Text('Transaction saved.')));
-        context.go(AppRoutes.bankTransactions);
+        ref.read(selectedVaultViewProvider.notifier).state =
+            VaultView.bankTransactions;
+        context.go(AppRoutes.vault);
       },
       (failure) {
         ScaffoldMessenger.of(context)
@@ -121,7 +124,9 @@ class _BankTransactionReviewScreenState
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
           ..showSnackBar(const SnackBar(content: Text('Transaction deleted.')));
-        context.go(AppRoutes.bankTransactions);
+        ref.read(selectedVaultViewProvider.notifier).state =
+            VaultView.bankTransactions;
+        context.go(AppRoutes.vault);
       },
       (failure) {
         ScaffoldMessenger.of(context)

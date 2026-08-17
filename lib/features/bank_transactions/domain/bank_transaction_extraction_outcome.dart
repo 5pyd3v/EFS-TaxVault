@@ -24,3 +24,14 @@ class BankTransactionExtractionDuplicate
   final String? existingReferenceNumber;
   final double? existingAmount;
 }
+
+/// The org's Gemini API key is missing, exhausted, or rejected — mirrors
+/// `ExtractionKeyError` (invoices). `code` is one of `no_api_key` /
+/// `quota_exceeded` / `invalid_key`, set by the Edge Function.
+class BankTransactionExtractionKeyError
+    extends BankTransactionExtractionOutcome {
+  const BankTransactionExtractionKeyError(this.code, this.message);
+
+  final String code;
+  final String message;
+}

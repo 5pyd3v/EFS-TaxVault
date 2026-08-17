@@ -6,6 +6,7 @@ import 'package:fbr_taxvault/core/router/app_routes.dart';
 import 'package:fbr_taxvault/core/theme/app_gradients.dart';
 import 'package:fbr_taxvault/core/theme/app_semantic_colors.dart';
 import 'package:fbr_taxvault/core/theme/app_spacing.dart';
+import 'package:fbr_taxvault/features/ai_key/presentation/ai_key_providers.dart';
 import 'package:fbr_taxvault/features/auth/presentation/auth_providers.dart';
 import 'package:fbr_taxvault/features/dashboard/domain/dashboard_summary.dart';
 import 'package:fbr_taxvault/features/dashboard/presentation/dashboard_providers.dart';
@@ -170,6 +171,7 @@ class _DashboardContent extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const _ApiKeyNudgeBanner(),
               _InsightsCard(summary: summary),
               const SizedBox(height: AppSpacing.xxxl),
               SectionHeader(
@@ -444,6 +446,66 @@ class _QuickAction extends StatelessWidget {
               style: theme.textTheme.labelSmall?.copyWith(
                 fontWeight: FontWeight.w700,
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A one-time nudge shown until the org configures a Gemini API key —
+/// adding a key is optional/skippable at onboarding, so this is the
+/// surface that eventually points people to it. Renders nothing once a key
+/// is configured, and nothing while the status is still loading (avoids a
+/// flash on every dashboard load).
+class _ApiKeyNudgeBanner extends ConsumerWidget {
+  const _ApiKeyNudgeBanner();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final organization = ref.watch(currentOrganizationProvider);
+    if (organization == null) return const SizedBox.shrink();
+
+    final status = ref.watch(geminiKeyStatusProvider(organization.id)).valueOrNull;
+    if (status == null || status.hasKey) return const SizedBox.shrink();
+
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.xxxl),
+      child: AppCard(
+        onTap: () => context.push(AppRoutes.aiKeySettings),
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Row(
+          children: [
+            IconChip(
+              icon: Icons.vpn_key_outlined,
+              color: theme.colorScheme.primary,
+              size: 40,
+            ),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Add your Gemini API key',
+                    style: theme.textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Required to enable document scanning',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 18,
+              color: theme.colorScheme.onSurfaceVariant,
             ),
           ],
         ),

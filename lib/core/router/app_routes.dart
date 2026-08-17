@@ -14,8 +14,8 @@ abstract final class AppRoutes {
   static const reports = '/reports';
   static const profile = '/profile';
   static const notifications = '/notifications';
+  static const aiKeySettings = '/settings/ai-key';
 
-  static const bankTransactions = '/bank-transactions';
   static const bankTransactionProcessingPattern =
       '/bank-transactions/processing/:documentId';
   static const bankTransactionReviewPattern =

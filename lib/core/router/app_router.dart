@@ -8,9 +8,9 @@ import 'package:fbr_taxvault/features/auth/presentation/onboarding_screen.dart';
 import 'package:fbr_taxvault/features/auth/presentation/sign_in_screen.dart';
 import 'package:fbr_taxvault/features/auth/presentation/sign_up_screen.dart';
 import 'package:fbr_taxvault/features/ai/presentation/processing_screen.dart';
+import 'package:fbr_taxvault/features/ai_key/presentation/ai_key_settings_screen.dart';
 import 'package:fbr_taxvault/features/bank_transactions/presentation/bank_transaction_processing_screen.dart';
 import 'package:fbr_taxvault/features/bank_transactions/presentation/bank_transaction_review_screen.dart';
-import 'package:fbr_taxvault/features/bank_transactions/presentation/bank_transactions_screen.dart';
 import 'package:fbr_taxvault/features/dashboard/presentation/dashboard_screen.dart';
 import 'package:fbr_taxvault/features/invoices/presentation/invoice_review_screen.dart';
 import 'package:fbr_taxvault/features/notifications/presentation/notifications_screen.dart';
@@ -67,8 +67,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (_, _) => const NotificationsScreen(),
       ),
       GoRoute(
-        path: AppRoutes.bankTransactions,
-        builder: (_, _) => const BankTransactionsScreen(),
+        path: AppRoutes.aiKeySettings,
+        builder: (_, _) => const AiKeySettingsScreen(),
       ),
       GoRoute(
         path: AppRoutes.bankTransactionProcessingPattern,

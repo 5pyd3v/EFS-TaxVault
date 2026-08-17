@@ -101,6 +101,9 @@ class _BankTransactionProcessingScreenState
                   ),
                   onSaveAnyway: _saveAnyway,
                 ),
+                BankTransactionExtractionKeyError() => _KeyErrorPrompt(
+                  outcome: outcome,
+                ),
               },
               loading: () => Column(
                 mainAxisSize: MainAxisSize.min,
@@ -170,6 +173,52 @@ final _extractionProvider =
           .extractBankTransaction(documentId);
       return result.fold((outcome) => outcome, (failure) => throw failure);
     });
+
+/// Shown when the org's Gemini key is missing/exhausted/invalid — mirrors
+/// the invoice processing screen's `_KeyErrorPrompt`.
+class _KeyErrorPrompt extends StatelessWidget {
+  const _KeyErrorPrompt({required this.outcome});
+
+  final BankTransactionExtractionKeyError outcome;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          Icons.key_off_outlined,
+          size: 40,
+          color: theme.colorScheme.error,
+        ),
+        const SizedBox(height: AppSpacing.xl),
+        Text('API key needs attention', style: theme.textTheme.titleMedium),
+        const SizedBox(height: AppSpacing.sm),
+        Text(
+          outcome.message,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: AppSpacing.xxl),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: () => context.push(AppRoutes.aiKeySettings),
+            child: const Text('Update API Key'),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.md),
+        TextButton(
+          onPressed: () => context.go(AppRoutes.home),
+          child: const Text('Back to Home'),
+        ),
+      ],
+    );
+  }
+}
 
 class _DuplicatePrompt extends StatelessWidget {
   const _DuplicatePrompt({

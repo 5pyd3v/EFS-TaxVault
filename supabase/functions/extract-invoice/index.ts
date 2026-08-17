@@ -23,6 +23,7 @@ import {
   INVOICE_EXTRACTION_PROMPT,
   INVOICE_EXTRACTION_PROMPT_VERSION,
 } from '../_shared/prompts/invoice_extraction_v2.ts';
+import { handleGeminiKeyError, resolveGeminiApiKey } from '../_shared/gemini_key.ts';
 
 // An alias, not a pinned version — always resolves to Google's current
 // recommended flash model, so this doesn't silently break again the next
@@ -64,7 +65,6 @@ Deno.serve(async (req) => {
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
-  const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
 
   const authHeader = req.headers.get('Authorization');
   if (!authHeader) {
@@ -125,8 +125,9 @@ Deno.serve(async (req) => {
     .eq('id', jobId);
 
   try {
-    if (!geminiApiKey) {
-      throw new Error('AI service is not configured.');
+    const geminiApiKey = await resolveGeminiApiKey(serviceClient, jobId, document.organization_id);
+    if (geminiApiKey instanceof Response) {
+      return geminiApiKey;
     }
 
     const imageParts = await downloadPageImages(serviceClient, document.storage_path, document.page_count);
@@ -282,6 +283,9 @@ Deno.serve(async (req) => {
     return jsonResponse({ invoice_id: invoice.id, warnings: warnings.length, calculation_mismatch: totals.calculationMismatch });
   } catch (error) {
     console.error('extract-invoice failed', error);
+    const status = (error as { status?: number } | null)?.status;
+    const keyErrorResponse = await handleGeminiKeyError(serviceClient, jobId, document.organization_id, status);
+    if (keyErrorResponse) return keyErrorResponse;
     await failJob(serviceClient, jobId, error instanceof Error ? error.message : 'Unknown error');
     return jsonResponse({ error: 'Could not process this document. Please try again.' }, 500);
   }
@@ -361,7 +365,9 @@ async function callGemini(
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(`Gemini request failed (${response.status}): ${text.slice(0, 300)}`);
+    const error = new Error(`Gemini request failed (${response.status}): ${text.slice(0, 300)}`);
+    (error as Error & { status?: number }).status = response.status;
+    throw error;
   }
 
   const payload = await response.json();

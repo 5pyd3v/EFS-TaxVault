@@ -7,6 +7,7 @@ import 'package:fbr_taxvault/core/theme/app_semantic_colors.dart';
 import 'package:fbr_taxvault/core/theme/app_spacing.dart';
 import 'package:fbr_taxvault/features/bank_transactions/domain/bank_transaction_summary.dart';
 import 'package:fbr_taxvault/features/bank_transactions/presentation/bank_transaction_providers.dart';
+import 'package:fbr_taxvault/shared/providers/invoice_mutation_effects.dart';
 import 'package:fbr_taxvault/shared/widgets/app_card.dart';
 import 'package:fbr_taxvault/shared/widgets/empty_state.dart';
 import 'package:fbr_taxvault/shared/widgets/icon_chip.dart';
@@ -95,6 +96,23 @@ class _BankTransactionsListViewState
             ),
           ),
         ),
+        if (state.periodLabel != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              0,
+              AppSpacing.lg,
+              AppSpacing.md,
+            ),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: InputChip(
+                avatar: const Icon(Icons.calendar_month_rounded, size: 16),
+                label: Text('Period: ${state.periodLabel}'),
+                onDeleted: controller.clearPeriodFilter,
+              ),
+            ),
+          ),
         Expanded(
           child: RefreshIndicator(
             onRefresh: controller.refresh,
@@ -127,17 +145,22 @@ class _BankTransactionsListViewState
     }
     if (state.items.isEmpty) {
       final searching = state.searchQuery.trim().isNotEmpty;
+      final filteringByPeriod = state.periodLabel != null;
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         children: [
           const SizedBox(height: AppSpacing.giant),
           EmptyState(
-            icon: searching
+            icon: searching || filteringByPeriod
                 ? Icons.search_off_rounded
                 : Icons.account_balance_wallet_outlined,
-            title: searching ? 'No matches' : 'No transactions yet',
+            title: searching || filteringByPeriod
+                ? 'No matches'
+                : 'No transactions yet',
             message: searching
                 ? 'No transactions match "${state.searchQuery}".'
+                : filteringByPeriod
+                ? 'No transactions found for ${state.periodLabel}.'
                 : 'Scan a bank receipt from the Scan tab and TaxVault will keep track of it here.',
           ),
         ],
@@ -309,6 +332,6 @@ class _TransactionTile extends ConsumerWidget {
           ..showSnackBar(SnackBar(content: Text(failure.message))),
       );
     }
-    ref.read(bankTransactionsControllerProvider.notifier).refresh();
+    refreshBankTransactionDependentState(ref);
   }
 }

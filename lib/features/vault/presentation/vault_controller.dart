@@ -8,7 +8,6 @@ import 'package:fbr_taxvault/features/vault/presentation/vault_providers.dart';
 
 class VaultState {
   const VaultState({
-    this.filter = VaultFilter.all,
     this.sort = VaultSort.newest,
     this.searchQuery = '',
     this.periodStart,
@@ -21,7 +20,6 @@ class VaultState {
     this.errorMessage,
   });
 
-  final VaultFilter filter;
   final VaultSort sort;
   final String searchQuery;
   final DateTime? periodStart;
@@ -41,7 +39,6 @@ class VaultState {
     String? errorMessage,
   }) {
     return VaultState(
-      filter: filter,
       sort: sort,
       searchQuery: searchQuery,
       periodStart: periodStart,
@@ -73,7 +70,6 @@ class VaultController extends Notifier<VaultState> {
     if (organization == null) return;
 
     state = VaultState(
-      filter: state.filter,
       sort: state.sort,
       searchQuery: state.searchQuery,
       periodStart: state.periodStart,
@@ -85,7 +81,6 @@ class VaultController extends Notifier<VaultState> {
         .read(vaultRepositoryProvider)
         .listInvoices(
           organizationId: organization.id,
-          filter: state.filter,
           sort: state.sort,
           searchQuery: state.searchQuery,
           periodStart: state.periodStart,
@@ -96,7 +91,6 @@ class VaultController extends Notifier<VaultState> {
 
     state = result.fold(
       (items) => VaultState(
-        filter: state.filter,
         sort: state.sort,
         searchQuery: state.searchQuery,
         periodStart: state.periodStart,
@@ -107,7 +101,6 @@ class VaultController extends Notifier<VaultState> {
         hasMore: items.length == pageSize,
       ),
       (failure) => VaultState(
-        filter: state.filter,
         sort: state.sort,
         searchQuery: state.searchQuery,
         periodStart: state.periodStart,
@@ -129,7 +122,6 @@ class VaultController extends Notifier<VaultState> {
         .read(vaultRepositoryProvider)
         .listInvoices(
           organizationId: organization.id,
-          filter: state.filter,
           sort: state.sort,
           searchQuery: state.searchQuery,
           periodStart: state.periodStart,
@@ -149,23 +141,9 @@ class VaultController extends Notifier<VaultState> {
     );
   }
 
-  void setFilter(VaultFilter filter) {
-    if (filter == state.filter) return;
-    state = VaultState(
-      filter: filter,
-      sort: state.sort,
-      searchQuery: state.searchQuery,
-      periodStart: state.periodStart,
-      periodEnd: state.periodEnd,
-      periodLabel: state.periodLabel,
-    );
-    refresh();
-  }
-
   void setSort(VaultSort sort) {
     if (sort == state.sort) return;
     state = VaultState(
-      filter: state.filter,
       sort: sort,
       searchQuery: state.searchQuery,
       periodStart: state.periodStart,
@@ -178,7 +156,6 @@ class VaultController extends Notifier<VaultState> {
   void setSearchQuery(String query) {
     if (query == state.searchQuery) return;
     state = VaultState(
-      filter: state.filter,
       sort: state.sort,
       searchQuery: query,
       periodStart: state.periodStart,
@@ -197,7 +174,6 @@ class VaultController extends Notifier<VaultState> {
     required String label,
   }) {
     state = VaultState(
-      filter: state.filter,
       sort: state.sort,
       searchQuery: '',
       periodStart: start,
@@ -209,11 +185,7 @@ class VaultController extends Notifier<VaultState> {
 
   void clearPeriodFilter() {
     if (state.periodStart == null) return;
-    state = VaultState(
-      filter: state.filter,
-      sort: state.sort,
-      searchQuery: state.searchQuery,
-    );
+    state = VaultState(sort: state.sort, searchQuery: state.searchQuery);
     refresh();
   }
 }

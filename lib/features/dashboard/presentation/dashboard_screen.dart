@@ -8,17 +8,17 @@ import 'package:fbr_taxvault/core/theme/app_semantic_colors.dart';
 import 'package:fbr_taxvault/core/theme/app_spacing.dart';
 import 'package:fbr_taxvault/features/ai_key/presentation/ai_key_providers.dart';
 import 'package:fbr_taxvault/features/auth/presentation/auth_providers.dart';
+import 'package:fbr_taxvault/features/bank_transactions/domain/bank_transaction_summary.dart';
 import 'package:fbr_taxvault/features/dashboard/domain/dashboard_summary.dart';
+import 'package:fbr_taxvault/features/dashboard/domain/recent_activity_item.dart';
 import 'package:fbr_taxvault/features/dashboard/presentation/dashboard_providers.dart';
 import 'package:fbr_taxvault/features/notifications/presentation/notifications_providers.dart';
-import 'package:fbr_taxvault/features/reports/domain/period_summary.dart';
 import 'package:fbr_taxvault/features/vault/domain/invoice_summary.dart';
 import 'package:fbr_taxvault/shared/widgets/app_card.dart';
 import 'package:fbr_taxvault/shared/widgets/async_value_view.dart';
 import 'package:fbr_taxvault/shared/widgets/empty_state.dart';
 import 'package:fbr_taxvault/shared/widgets/icon_chip.dart';
 import 'package:fbr_taxvault/shared/widgets/section_header.dart';
-import 'package:fbr_taxvault/shared/widgets/sparkline_chart.dart';
 
 final _currencyFormat = NumberFormat.currency(
   locale: 'en_US',
@@ -145,7 +145,8 @@ class _DashboardContent extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final trendAsync = ref.watch(monthlyTaxTrendProvider);
+    final hasActivity =
+        summary.totalInvoices > 0 || summary.totalBankTransactions > 0;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -153,10 +154,7 @@ class _DashboardContent extends ConsumerWidget {
         Stack(
           clipBehavior: Clip.none,
           children: [
-            _CurvedHeroCard(
-              summary: summary,
-              trend: trendAsync.valueOrNull ?? const [],
-            ),
+            _CurvedHeroCard(summary: summary),
             Positioned(
               left: AppSpacing.xxl,
               right: AppSpacing.xxl,
@@ -175,25 +173,25 @@ class _DashboardContent extends ConsumerWidget {
               _InsightsCard(summary: summary),
               const SizedBox(height: AppSpacing.xxxl),
               SectionHeader(
-                title: 'Recent invoices',
-                actionLabel: summary.totalInvoices == 0 ? null : 'See all',
-                onAction: summary.totalInvoices == 0
-                    ? null
-                    : () => context.go(AppRoutes.vault),
+                title: 'Recent activity',
+                actionLabel: hasActivity ? 'See all' : null,
+                onAction: hasActivity
+                    ? () => context.go(AppRoutes.vault)
+                    : null,
               ),
               const SizedBox(height: AppSpacing.lg),
-              if (summary.totalInvoices == 0)
+              if (!hasActivity)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: AppSpacing.xxxl),
                   child: EmptyState(
                     icon: Icons.inbox_outlined,
-                    title: 'No invoices yet',
+                    title: 'Nothing here yet',
                     message:
-                        'Scan your first invoice and TaxVault will organize the rest.',
+                        'Scan your first invoice or bank receipt and TaxVault will organize the rest.',
                   ),
                 )
               else
-                const _RecentInvoicesList(),
+                const _RecentActivityList(),
               const SizedBox(height: AppSpacing.giant),
             ],
           ),
@@ -204,25 +202,19 @@ class _DashboardContent extends ConsumerWidget {
 }
 
 /// The dashboard's headline — an organic wave-bottom silhouette instead of a
-/// plain rounded rectangle, carrying the month's tax number, a
-/// month-over-month trend badge, and a 6-month sparkline. This is the one
-/// shape in the app that isn't just a rounded box, on purpose.
+/// plain rounded rectangle. Deliberately shows document *activity*, not a
+/// money figure: TaxVault organizes documents, it doesn't total up a bank
+/// balance, so leading with a currency amount (often just "Rs 0" for a
+/// quiet month) sent the wrong signal about what this screen is for.
 class _CurvedHeroCard extends StatelessWidget {
-  const _CurvedHeroCard({required this.summary, required this.trend});
+  const _CurvedHeroCard({required this.summary});
 
   final DashboardSummary summary;
-  final List<PeriodSummary> trend;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final values = trend.map((e) => e.taxTotal).toList();
-
-    double? changePct;
-    if (values.length >= 2 && values[values.length - 2] > 0) {
-      final previous = values[values.length - 2];
-      changePct = ((values.last - previous) / previous) * 100;
-    }
+    final documents = summary.currentMonthDocuments;
 
     return RepaintBoundary(
       child: ClipPath(
@@ -240,83 +232,49 @@ class _CurvedHeroCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Tax exposure this month',
+                'Documents scanned this month',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: Colors.white.withValues(alpha: 0.85),
                   fontWeight: FontWeight.w500,
                 ),
               ),
               const SizedBox(height: 6),
+              Text(
+                '$documents',
+                style: theme.textTheme.displaySmall?.copyWith(
+                  color: Colors.white,
+                  fontSize: 40,
+                  height: 1,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.lg),
               Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Flexible(
+                  Icon(
+                    summary.pendingVerification > 0
+                        ? Icons.fact_check_outlined
+                        : Icons.check_circle_outline_rounded,
+                    size: 16,
+                    color: Colors.white.withValues(alpha: 0.85),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
                     child: Text(
-                      _currencyFormat.format(summary.currentMonthTaxAmount),
-                      style: theme.textTheme.displaySmall?.copyWith(
-                        color: Colors.white,
-                        fontSize: 40,
-                        height: 1,
+                      summary.pendingVerification > 0
+                          ? '${summary.pendingVerification} document${summary.pendingVerification == 1 ? '' : 's'} waiting for review'
+                          : 'Everything is organized and up to date',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: Colors.white.withValues(alpha: 0.85),
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  if (changePct != null) ...[
-                    const SizedBox(width: 10),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
-                      child: _TrendBadge(changePct: changePct),
-                    ),
-                  ],
                 ],
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              Padding(
-                padding: const EdgeInsets.only(right: AppSpacing.xxl),
-                child: SparklineChart(
-                  values: values,
-                  lineColor: Colors.white,
-                  height: 44,
-                ),
               ),
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _TrendBadge extends StatelessWidget {
-  const _TrendBadge({required this.changePct});
-
-  final double changePct;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isUp = changePct >= 0;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.18),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            isUp ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
-            size: 12,
-            color: Colors.white,
-          ),
-          const SizedBox(width: 2),
-          Text(
-            '${changePct.abs().toStringAsFixed(0)}%',
-            style: theme.textTheme.labelSmall?.copyWith(color: Colors.white),
-          ),
-        ],
       ),
     );
   }
@@ -609,78 +567,153 @@ class _InsightRow extends StatelessWidget {
   }
 }
 
-class _RecentInvoicesList extends ConsumerWidget {
-  const _RecentInvoicesList();
+class _RecentActivityList extends ConsumerWidget {
+  const _RecentActivityList();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final recentAsync = ref.watch(recentInvoicesProvider);
-    final theme = Theme.of(context);
+    final recentAsync = ref.watch(recentActivityProvider);
 
-    return AsyncValueView<List<InvoiceSummary>>(
+    return AsyncValueView<List<RecentActivityItem>>(
       value: recentAsync,
       loading: (_) => const SizedBox.shrink(),
-      data: (invoices) => Column(
+      data: (items) => Column(
         children: [
-          for (final invoice in invoices)
+          for (final item in items)
             Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-              child: AppCard(
-                onTap: () => context.push(AppRoutes.invoiceReview(invoice.id)),
-                padding: const EdgeInsets.all(AppSpacing.md),
-                child: Row(
-                  children: [
-                    IconChip(
-                      icon: Icons.storefront_outlined,
-                      colorKey: invoice.supplierName,
-                    ),
-                    const SizedBox(width: AppSpacing.md),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            invoice.supplierName,
-                            style: theme.textTheme.titleSmall,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            _relativeLabel(invoice.invoiceDate),
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Text(
-                      _currencyFormat.format(invoice.totalAmount),
-                      style: theme.textTheme.titleMedium,
-                    ),
-                  ],
+              child: switch (item) {
+                RecentInvoiceActivity() => _InvoiceActivityTile(
+                  invoice: item.invoice,
                 ),
-              ),
+                RecentBankTransactionActivity() => _TransactionActivityTile(
+                  transaction: item.transaction,
+                ),
+              },
             ),
         ],
       ),
     );
   }
+}
 
-  String _relativeLabel(DateTime? date) {
-    if (date == null) return 'Undated';
-    final today = DateTime.now();
-    final diff = DateTime(
-      today.year,
-      today.month,
-      today.day,
-    ).difference(DateTime(date.year, date.month, date.day)).inDays;
-    if (diff == 0) return 'Today';
-    if (diff == 1) return 'Yesterday';
-    if (diff > 1 && diff < 7) return '$diff days ago';
-    return _dateFormat.format(date);
+class _InvoiceActivityTile extends StatelessWidget {
+  const _InvoiceActivityTile({required this.invoice});
+
+  final InvoiceSummary invoice;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AppCard(
+      onTap: () => context.push(AppRoutes.invoiceReview(invoice.id)),
+      padding: const EdgeInsets.all(AppSpacing.md),
+      child: Row(
+        children: [
+          IconChip(
+            icon: Icons.storefront_outlined,
+            colorKey: invoice.supplierName,
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  invoice.supplierName,
+                  style: theme.textTheme.titleSmall,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _relativeLabel(invoice.invoiceDate),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Text(
+            _currencyFormat.format(invoice.totalAmount),
+            style: theme.textTheme.titleMedium,
+          ),
+        ],
+      ),
+    );
   }
+}
+
+class _TransactionActivityTile extends StatelessWidget {
+  const _TransactionActivityTile({required this.transaction});
+
+  final BankTransactionSummary transaction;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final semantic = theme.extension<AppSemanticColors>()!;
+    final isCredit = transaction.direction == 'credit';
+    final amountColor = isCredit
+        ? semantic.success
+        : theme.colorScheme.onSurface;
+
+    return AppCard(
+      onTap: () =>
+          context.push(AppRoutes.bankTransactionReview(transaction.id)),
+      padding: const EdgeInsets.all(AppSpacing.md),
+      child: Row(
+        children: [
+          IconChip(
+            icon: isCredit
+                ? Icons.call_received_rounded
+                : Icons.call_made_rounded,
+            colorKey: transaction.counterpartyName,
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  transaction.counterpartyName,
+                  style: theme.textTheme.titleSmall,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _relativeLabel(transaction.transactionDate),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Text(
+            '${isCredit ? '+' : '-'}${_currencyFormat.format(transaction.amount)}',
+            style: theme.textTheme.titleMedium?.copyWith(color: amountColor),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _relativeLabel(DateTime? date) {
+  if (date == null) return 'Undated';
+  final today = DateTime.now();
+  final diff = DateTime(
+    today.year,
+    today.month,
+    today.day,
+  ).difference(DateTime(date.year, date.month, date.day)).inDays;
+  if (diff == 0) return 'Today';
+  if (diff == 1) return 'Yesterday';
+  if (diff > 1 && diff < 7) return '$diff days ago';
+  return _dateFormat.format(date);
 }
 
 class _DashboardSkeleton extends StatelessWidget {

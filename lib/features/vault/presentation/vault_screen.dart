@@ -11,10 +11,9 @@ import 'package:fbr_taxvault/features/bank_transactions/presentation/bank_transa
 import 'package:fbr_taxvault/features/bank_transactions/presentation/bank_transaction_providers.dart';
 import 'package:fbr_taxvault/features/invoices/presentation/invoice_review_providers.dart';
 import 'package:fbr_taxvault/features/vault/domain/invoice_summary.dart';
-import 'package:fbr_taxvault/features/vault/domain/vault_filter.dart';
+import 'package:fbr_taxvault/features/vault/domain/vault_filter.dart' show VaultSort;
 import 'package:fbr_taxvault/features/vault/presentation/vault_controller.dart';
 import 'package:fbr_taxvault/features/vault/presentation/vault_providers.dart';
-import 'package:fbr_taxvault/shared/domain/document_type.dart';
 import 'package:fbr_taxvault/shared/providers/invoice_mutation_effects.dart';
 import 'package:fbr_taxvault/shared/widgets/app_card.dart';
 import 'package:fbr_taxvault/shared/widgets/empty_state.dart';
@@ -233,23 +232,6 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
               ),
             ),
           ),
-        SizedBox(
-          height: 44,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-            itemCount: VaultFilter.values.length,
-            separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.sm),
-            itemBuilder: (context, index) {
-              final filter = VaultFilter.values[index];
-              return ChoiceChip(
-                label: Text(filter.label),
-                selected: state.filter == filter,
-                onSelected: (_) => controller.setFilter(filter),
-              );
-            },
-          ),
-        ),
         const Divider(height: 1),
         Expanded(
           child: RefreshIndicator(
@@ -359,7 +341,7 @@ class _InvoiceTile extends ConsumerWidget {
         child: Row(
           children: [
             IconChip(
-              icon: _iconFor(invoice.documentType),
+              icon: Icons.receipt_long_outlined,
               colorKey: invoice.supplierName,
             ),
             const SizedBox(width: AppSpacing.md),
@@ -466,15 +448,5 @@ class _InvoiceTile extends ConsumerWidget {
     // real delete, and restores the row if the delete actually failed. Also
     // refreshes Dashboard/Reports so a deleted invoice doesn't linger there.
     refreshInvoiceDependentState(ref);
-  }
-
-  IconData _iconFor(DocumentType type) {
-    return switch (type) {
-      DocumentType.invoice => Icons.receipt_long_outlined,
-      DocumentType.receipt => Icons.receipt_outlined,
-      DocumentType.taxDocument => Icons.account_balance_outlined,
-      DocumentType.other => Icons.description_outlined,
-      DocumentType.bankTransaction => Icons.account_balance_wallet_outlined,
-    };
   }
 }

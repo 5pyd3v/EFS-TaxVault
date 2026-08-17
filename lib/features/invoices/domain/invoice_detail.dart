@@ -59,6 +59,8 @@ class InvoiceDetail {
     required this.aiConfidence,
     required this.items,
     required this.warnings,
+    this.documentStoragePath,
+    this.documentPageCount = 0,
   });
 
   final String id;
@@ -77,6 +79,17 @@ class InvoiceDetail {
   final List<InvoiceItemLine> items;
   final List<AiWarning> warnings;
 
+  /// Null when the source document was deleted independently of this
+  /// invoice (`documents.id` on `invoices.document_id` is `on delete set
+  /// null`) — in that case there's no original scan left to view.
+  final String? documentStoragePath;
+  final int documentPageCount;
+
+  bool get hasScannedDocument =>
+      documentStoragePath != null &&
+      documentStoragePath!.isNotEmpty &&
+      documentPageCount > 0;
+
   double confidenceFor(String field) =>
       (aiConfidence[field] as num?)?.toDouble() ?? 1.0;
 
@@ -86,6 +99,7 @@ class InvoiceDetail {
     required List<Map<String, dynamic>> warnings,
     required String supplierName,
   }) {
+    final document = invoice['documents'] as Map<String, dynamic>?;
     return InvoiceDetail(
       id: invoice['id'] as String,
       invoiceNumber: invoice['invoice_number'] as String? ?? '',
@@ -105,6 +119,8 @@ class InvoiceDetail {
           const {},
       items: items.map(InvoiceItemLine.fromMap).toList(),
       warnings: warnings.map(AiWarning.fromMap).toList(),
+      documentStoragePath: document?['storage_path'] as String?,
+      documentPageCount: (document?['page_count'] as num?)?.toInt() ?? 0,
     );
   }
 }

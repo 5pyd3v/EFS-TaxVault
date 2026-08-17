@@ -15,6 +15,8 @@ class BankTransactionDetail {
     required this.status,
     required this.verificationStatus,
     required this.aiConfidence,
+    this.documentStoragePath,
+    this.documentPageCount = 0,
   });
 
   final String id;
@@ -30,10 +32,22 @@ class BankTransactionDetail {
   final String verificationStatus;
   final Map<String, dynamic> aiConfidence;
 
+  /// Null when the source document was deleted independently of this
+  /// transaction (`documents.id` on `bank_transactions.document_id` is `on
+  /// delete set null`) — in that case there's no original scan left to view.
+  final String? documentStoragePath;
+  final int documentPageCount;
+
+  bool get hasScannedDocument =>
+      documentStoragePath != null &&
+      documentStoragePath!.isNotEmpty &&
+      documentPageCount > 0;
+
   double confidenceFor(String field) =>
       (aiConfidence[field] as num?)?.toDouble() ?? 1.0;
 
   factory BankTransactionDetail.fromMap(Map<String, dynamic> map) {
+    final document = map['documents'] as Map<String, dynamic>?;
     return BankTransactionDetail(
       id: map['id'] as String,
       direction: map['direction'] as String? ?? 'debit',
@@ -49,6 +63,8 @@ class BankTransactionDetail {
           map['verification_status'] as String? ?? 'needs_review',
       aiConfidence:
           (map['ai_confidence'] as Map?)?.cast<String, dynamic>() ?? const {},
+      documentStoragePath: document?['storage_path'] as String?,
+      documentPageCount: (document?['page_count'] as num?)?.toInt() ?? 0,
     );
   }
 }

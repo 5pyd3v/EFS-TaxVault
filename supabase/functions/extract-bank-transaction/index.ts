@@ -23,8 +23,15 @@ import {
   BANK_TRANSACTION_EXTRACTION_PROMPT_VERSION,
 } from '../_shared/prompts/bank_transaction_extraction_v3.ts';
 import { handleGeminiKeyError, resolveGeminiApiKey } from '../_shared/gemini_key.ts';
+import { fetchGeminiWithRetry } from '../_shared/gemini_fetch.ts';
 
+// See extract-invoice/index.ts for why this alias needs a pinned fallback:
+// right after Google ships a new model generation, "-latest" can point at
+// a freshly-launched, under-provisioned model returning sustained 503s.
 const GEMINI_MODEL = 'gemini-flash-latest';
+// Supported until 2026-10-16; replace with the current stable (non-preview)
+// flash model if it starts failing too.
+const GEMINI_FALLBACK_MODEL = 'gemini-2.5-flash';
 const DOCUMENT_BUCKET = 'documents';
 
 interface ExtractBankTransactionRequest {
@@ -104,7 +111,7 @@ Deno.serve(async (req) => {
     }
 
     const imageParts = await downloadPageImages(serviceClient, document.storage_path, document.page_count);
-    const extraction = await callGemini(geminiApiKey, imageParts);
+    const { data: extraction, model: modelUsed } = await callGemini(geminiApiKey, imageParts);
 
     if (!extraction.isBankTransaction) {
       await failJob(serviceClient, jobId, 'The scanned image does not appear to be a transaction receipt.');
@@ -174,7 +181,7 @@ Deno.serve(async (req) => {
       organization_id: document.organization_id,
       job_id: jobId,
       invoice_id: null,
-      model: GEMINI_MODEL,
+      model: modelUsed,
       prompt_version: BANK_TRANSACTION_EXTRACTION_PROMPT_VERSION,
       schema_version: EXTRACTION_SCHEMA_VERSION,
       raw_response: extraction,
@@ -240,9 +247,26 @@ async function downloadPageImages(
 async function callGemini(
   apiKey: string,
   images: { mimeType: string; data: string }[],
+): Promise<{ data: BankTransactionExtractionResult; model: string }> {
+  try {
+    return { data: await callGeminiModel(GEMINI_MODEL, apiKey, images), model: GEMINI_MODEL };
+  } catch (error) {
+    const status = (error as { status?: number } | null)?.status;
+    if (status !== 503) throw error;
+    return {
+      data: await callGeminiModel(GEMINI_FALLBACK_MODEL, apiKey, images),
+      model: GEMINI_FALLBACK_MODEL,
+    };
+  }
+}
+
+async function callGeminiModel(
+  model: string,
+  apiKey: string,
+  images: { mimeType: string; data: string }[],
 ): Promise<BankTransactionExtractionResult> {
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
+  const response = await fetchGeminiWithRetry(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },

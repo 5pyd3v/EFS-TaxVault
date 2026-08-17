@@ -7,7 +7,9 @@ import 'package:fbr_taxvault/core/router/app_routes.dart';
 import 'package:fbr_taxvault/core/theme/app_spacing.dart';
 import 'package:fbr_taxvault/features/bank_transactions/domain/bank_transaction_detail.dart';
 import 'package:fbr_taxvault/features/bank_transactions/presentation/bank_transaction_providers.dart';
+import 'package:fbr_taxvault/features/documents/presentation/document_viewer_screen.dart';
 import 'package:fbr_taxvault/features/vault/presentation/vault_providers.dart';
+import 'package:fbr_taxvault/shared/providers/invoice_mutation_effects.dart';
 import 'package:fbr_taxvault/shared/widgets/app_card.dart';
 import 'package:fbr_taxvault/shared/widgets/async_value_view.dart';
 
@@ -91,7 +93,7 @@ class _BankTransactionReviewScreenState
         // autoDispose) FutureProvider.family, so it caches the response
         // forever unless explicitly invalidated after a mutation.
         ref.invalidate(bankTransactionDetailProvider(widget.transactionId));
-        ref.read(bankTransactionsControllerProvider.notifier).refresh();
+        refreshBankTransactionDependentState(ref);
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
           ..showSnackBar(const SnackBar(content: Text('Transaction saved.')));
@@ -120,7 +122,7 @@ class _BankTransactionReviewScreenState
     result.fold(
       (_) {
         ref.invalidate(bankTransactionDetailProvider(widget.transactionId));
-        ref.read(bankTransactionsControllerProvider.notifier).refresh();
+        refreshBankTransactionDependentState(ref);
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
           ..showSnackBar(const SnackBar(content: Text('Transaction deleted.')));
@@ -133,6 +135,18 @@ class _BankTransactionReviewScreenState
           ..hideCurrentSnackBar()
           ..showSnackBar(SnackBar(content: Text(failure.message)));
       },
+    );
+  }
+
+  void _viewOriginalDocument(BankTransactionDetail detail) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => DocumentViewerScreen(
+          storagePath: detail.documentStoragePath!,
+          pageCount: detail.documentPageCount,
+          title: 'Original receipt',
+        ),
+      ),
     );
   }
 
@@ -207,6 +221,12 @@ class _BankTransactionReviewScreenState
         appBar: AppBar(
           title: const Text('Review Transaction'),
           actions: [
+            if (detailAsync.valueOrNull?.hasScannedDocument ?? false)
+              IconButton(
+                icon: const Icon(Icons.image_outlined),
+                tooltip: 'View original scan',
+                onPressed: () => _viewOriginalDocument(detailAsync.value!),
+              ),
             IconButton(
               icon: _isDeleting
                   ? const SizedBox(

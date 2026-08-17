@@ -7,11 +7,15 @@ import 'package:fbr_taxvault/core/router/app_routes.dart';
 import 'package:fbr_taxvault/core/theme/app_semantic_colors.dart';
 import 'package:fbr_taxvault/core/theme/app_spacing.dart';
 import 'package:fbr_taxvault/features/auth/presentation/auth_providers.dart';
+import 'package:fbr_taxvault/features/bank_transactions/presentation/bank_transaction_providers.dart';
+import 'package:fbr_taxvault/features/reports/domain/counterparty_summary.dart';
 import 'package:fbr_taxvault/features/reports/domain/period_summary.dart';
 import 'package:fbr_taxvault/features/reports/domain/period_type.dart';
 import 'package:fbr_taxvault/features/reports/domain/supplier_summary.dart';
+import 'package:fbr_taxvault/features/reports/domain/transaction_period_summary.dart';
 import 'package:fbr_taxvault/features/reports/presentation/reports_providers.dart';
 import 'package:fbr_taxvault/features/vault/presentation/vault_controller.dart';
+import 'package:fbr_taxvault/features/vault/presentation/vault_providers.dart';
 import 'package:fbr_taxvault/shared/widgets/app_card.dart';
 import 'package:fbr_taxvault/shared/widgets/async_value_view.dart';
 import 'package:fbr_taxvault/shared/widgets/empty_state.dart';
@@ -53,11 +57,14 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
   Future<void> _exportToExcel() async {
     final organization = ref.read(currentOrganizationProvider);
     if (organization == null || _isExporting) return;
+    final domain = ref.read(selectedReportDomainProvider);
 
     setState(() => _isExporting = true);
-    final result = await ref
-        .read(reportExportServiceProvider)
-        .exportToExcel(organization.id);
+    final result = domain == ReportDomain.invoices
+        ? await ref.read(reportExportServiceProvider).exportToExcel(organization.id)
+        : await ref
+              .read(bankTransactionExportServiceProvider)
+              .exportToExcel(organization.id);
 
     if (!mounted) return;
     setState(() => _isExporting = false);
@@ -88,8 +95,10 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final domain = ref.watch(selectedReportDomainProvider);
     final view = ref.watch(selectedReportViewProvider);
     final query = ref.watch(reportsSearchQueryProvider);
+    final isInvoices = domain == ReportDomain.invoices;
 
     return Scaffold(
       appBar: AppBar(
@@ -130,15 +139,39 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
               AppSpacing.lg,
               AppSpacing.md,
             ),
-            child: SegmentedButton<ReportView>(
+            child: SegmentedButton<ReportDomain>(
               segments: const [
                 ButtonSegment(
+                  value: ReportDomain.invoices,
+                  label: Text('Invoices'),
+                ),
+                ButtonSegment(
+                  value: ReportDomain.bankTransactions,
+                  label: Text('Bank Transactions'),
+                ),
+              ],
+              selected: {domain},
+              onSelectionChanged: (selection) =>
+                  ref.read(selectedReportDomainProvider.notifier).state =
+                      selection.first,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              0,
+              AppSpacing.lg,
+              AppSpacing.md,
+            ),
+            child: SegmentedButton<ReportView>(
+              segments: [
+                const ButtonSegment(
                   value: ReportView.byPeriod,
                   label: Text('By period'),
                 ),
                 ButtonSegment(
-                  value: ReportView.bySupplier,
-                  label: Text('By supplier'),
+                  value: ReportView.byGroup,
+                  label: Text(isInvoices ? 'By supplier' : 'By counterparty'),
                 ),
               ],
               selected: {view},
@@ -161,7 +194,9 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
               decoration: InputDecoration(
                 hintText: view == ReportView.byPeriod
                     ? 'Search periods, e.g. "January"'
-                    : 'Search suppliers',
+                    : isInvoices
+                    ? 'Search suppliers'
+                    : 'Search counterparties',
                 prefixIcon: const Icon(Icons.search_rounded, size: 20),
                 suffixIcon: query.isEmpty
                     ? null
@@ -176,14 +211,21 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
               ),
             ),
           ),
-          Expanded(
-            child: view == ReportView.byPeriod
-                ? const _ByPeriodView()
-                : const _BySupplierView(),
-          ),
+          Expanded(child: _buildBody(domain, view)),
         ],
       ),
     );
+  }
+
+  Widget _buildBody(ReportDomain domain, ReportView view) {
+    if (domain == ReportDomain.invoices) {
+      return view == ReportView.byPeriod
+          ? const _ByPeriodView()
+          : const _BySupplierView();
+    }
+    return view == ReportView.byPeriod
+        ? const _TransactionsByPeriodView()
+        : const _ByCounterpartyView();
   }
 }
 
@@ -214,7 +256,12 @@ class _ByPeriodView extends ConsumerWidget {
                     )
                     .toList();
 
-          if (allSummaries.isEmpty) return const _ReportsEmptyState();
+          if (allSummaries.isEmpty) {
+            return const _ReportsEmptyState(
+              message:
+                  'Once you have invoices in your vault, tax reports will appear here.',
+            );
+          }
           if (summaries.isEmpty) return _NoSearchResults(query: query);
 
           return ListView.separated(
@@ -227,11 +274,14 @@ class _ByPeriodView extends ConsumerWidget {
                 return _SummaryCard(
                   countLabel:
                       '${summaries.fold<int>(0, (a, s) => a + s.invoiceCount)}',
-                  purchasesTotal: summaries.fold<double>(
-                    0,
-                    (a, s) => a + s.purchasesTotal,
+                  stat1Label: 'Purchases',
+                  stat1Value: _currencyFormat.format(
+                    summaries.fold<double>(0, (a, s) => a + s.purchasesTotal),
                   ),
-                  taxTotal: summaries.fold<double>(0, (a, s) => a + s.taxTotal),
+                  stat2Label: 'Tax',
+                  stat2Value: _currencyFormat.format(
+                    summaries.fold<double>(0, (a, s) => a + s.taxTotal),
+                  ),
                 );
               }
               return _PeriodRow(
@@ -267,7 +317,12 @@ class _BySupplierView extends ConsumerWidget {
                     .where((s) => s.supplierName.toLowerCase().contains(query))
                     .toList();
 
-          if (allSummaries.isEmpty) return const _ReportsEmptyState();
+          if (allSummaries.isEmpty) {
+            return const _ReportsEmptyState(
+              message:
+                  'Once you have invoices in your vault, tax reports will appear here.',
+            );
+          }
           if (summaries.isEmpty) return _NoSearchResults(query: query);
 
           return ListView.separated(
@@ -280,11 +335,14 @@ class _BySupplierView extends ConsumerWidget {
                 return _SummaryCard(
                   countLabel: '${summaries.length}',
                   countSuffix: 'suppliers',
-                  purchasesTotal: summaries.fold<double>(
-                    0,
-                    (a, s) => a + s.purchasesTotal,
+                  stat1Label: 'Purchases',
+                  stat1Value: _currencyFormat.format(
+                    summaries.fold<double>(0, (a, s) => a + s.purchasesTotal),
                   ),
-                  taxTotal: summaries.fold<double>(0, (a, s) => a + s.taxTotal),
+                  stat2Label: 'Tax',
+                  stat2Value: _currencyFormat.format(
+                    summaries.fold<double>(0, (a, s) => a + s.taxTotal),
+                  ),
                 );
               }
               return _SupplierRow(summary: summaries[index - 1]);
@@ -296,20 +354,149 @@ class _BySupplierView extends ConsumerWidget {
   }
 }
 
+class _TransactionsByPeriodView extends ConsumerWidget {
+  const _TransactionsByPeriodView();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final periodType = ref.watch(selectedPeriodTypeProvider);
+    final summariesAsync = ref.watch(transactionPeriodSummariesProvider);
+    final query = ref.watch(reportsSearchQueryProvider).trim().toLowerCase();
+
+    return RefreshIndicator(
+      onRefresh: () async => ref.invalidate(transactionPeriodSummariesProvider),
+      child: AsyncValueView<List<TransactionPeriodSummary>>(
+        value: summariesAsync,
+        onRetry: () => ref.invalidate(transactionPeriodSummariesProvider),
+        loading: (_) => const ListSkeleton(),
+        data: (allSummaries) {
+          final summaries = query.isEmpty
+              ? allSummaries
+              : allSummaries
+                    .where(
+                      (s) => _periodLabel(
+                        periodType,
+                        s.periodStart,
+                      ).toLowerCase().contains(query),
+                    )
+                    .toList();
+
+          if (allSummaries.isEmpty) {
+            return const _ReportsEmptyState(
+              message:
+                  'Once you have bank transactions in your vault, reports will appear here.',
+            );
+          }
+          if (summaries.isEmpty) return _NoSearchResults(query: query);
+
+          return ListView.separated(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            itemCount: summaries.length + 1,
+            separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
+            itemBuilder: (context, index) {
+              if (index == 0) {
+                return _SummaryCard(
+                  countLabel:
+                      '${summaries.fold<int>(0, (a, s) => a + s.transactionCount)}',
+                  countSuffix: 'transactions',
+                  stat1Label: 'Received',
+                  stat1Value: _currencyFormat.format(
+                    summaries.fold<double>(0, (a, s) => a + s.creditTotal),
+                  ),
+                  stat2Label: 'Sent',
+                  stat2Value: _currencyFormat.format(
+                    summaries.fold<double>(0, (a, s) => a + s.debitTotal),
+                  ),
+                );
+              }
+              return _TransactionPeriodRow(
+                summary: summaries[index - 1],
+                periodType: periodType,
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _ByCounterpartyView extends ConsumerWidget {
+  const _ByCounterpartyView();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final summariesAsync = ref.watch(counterpartySummariesProvider);
+    final query = ref.watch(reportsSearchQueryProvider).trim().toLowerCase();
+
+    return RefreshIndicator(
+      onRefresh: () async => ref.invalidate(counterpartySummariesProvider),
+      child: AsyncValueView<List<CounterpartySummary>>(
+        value: summariesAsync,
+        onRetry: () => ref.invalidate(counterpartySummariesProvider),
+        loading: (_) => const ListSkeleton(),
+        data: (allSummaries) {
+          final summaries = query.isEmpty
+              ? allSummaries
+              : allSummaries
+                    .where(
+                      (s) => s.counterpartyName.toLowerCase().contains(query),
+                    )
+                    .toList();
+
+          if (allSummaries.isEmpty) {
+            return const _ReportsEmptyState(
+              message:
+                  'Once you have bank transactions in your vault, reports will appear here.',
+            );
+          }
+          if (summaries.isEmpty) return _NoSearchResults(query: query);
+
+          return ListView.separated(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            itemCount: summaries.length + 1,
+            separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
+            itemBuilder: (context, index) {
+              if (index == 0) {
+                return _SummaryCard(
+                  countLabel: '${summaries.length}',
+                  countSuffix: 'counterparties',
+                  stat1Label: 'Received',
+                  stat1Value: _currencyFormat.format(
+                    summaries.fold<double>(0, (a, s) => a + s.creditTotal),
+                  ),
+                  stat2Label: 'Sent',
+                  stat2Value: _currencyFormat.format(
+                    summaries.fold<double>(0, (a, s) => a + s.debitTotal),
+                  ),
+                );
+              }
+              return _CounterpartyRow(summary: summaries[index - 1]);
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
 class _ReportsEmptyState extends StatelessWidget {
-  const _ReportsEmptyState();
+  const _ReportsEmptyState({required this.message});
+
+  final String message;
 
   @override
   Widget build(BuildContext context) {
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
-      children: const [
-        SizedBox(height: AppSpacing.giant),
+      children: [
+        const SizedBox(height: AppSpacing.giant),
         EmptyState(
           icon: Icons.bar_chart_rounded,
           title: 'No reports yet',
-          message:
-              'Once you have invoices in your vault, tax reports will appear here.',
+          message: message,
         ),
       ],
     );
@@ -339,19 +526,25 @@ class _NoSearchResults extends StatelessWidget {
 
 /// One neutral card holding the whole view's totals — three columns, not
 /// three separate colored tiles. A single quiet summary, not a wall of
-/// color competing with the list below it.
+/// color competing with the list below it. Generic over its two secondary
+/// stats so both invoice totals (purchases/tax) and transaction totals
+/// (received/sent) reuse the same card.
 class _SummaryCard extends StatelessWidget {
   const _SummaryCard({
     required this.countLabel,
-    required this.purchasesTotal,
-    required this.taxTotal,
+    required this.stat1Label,
+    required this.stat1Value,
+    required this.stat2Label,
+    required this.stat2Value,
     this.countSuffix = 'invoices',
   });
 
   final String countLabel;
   final String countSuffix;
-  final double purchasesTotal;
-  final double taxTotal;
+  final String stat1Label;
+  final String stat1Value;
+  final String stat2Label;
+  final String stat2Value;
 
   @override
   Widget build(BuildContext context) {
@@ -370,16 +563,13 @@ class _SummaryCard extends StatelessWidget {
             ),
             _VerticalDivider(theme: theme),
             Expanded(
-              child: _SummaryStat(
-                label: 'Purchases',
-                value: _currencyFormat.format(purchasesTotal),
-              ),
+              child: _SummaryStat(label: stat1Label, value: stat1Value),
             ),
             _VerticalDivider(theme: theme),
             Expanded(
               child: _SummaryStat(
-                label: 'Tax',
-                value: _currencyFormat.format(taxTotal),
+                label: stat2Label,
+                value: stat2Value,
                 color: theme.colorScheme.primary,
               ),
             ),
@@ -562,6 +752,161 @@ class _SupplierRow extends ConsumerWidget {
               Text(
                 _currencyFormat.format(summary.purchasesTotal),
                 style: theme.textTheme.titleMedium,
+              ),
+              if (summary.needsReviewCount > 0) ...[
+                const SizedBox(height: 2),
+                Text(
+                  '${summary.needsReviewCount} to review',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: semantic.warning,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TransactionPeriodRow extends ConsumerWidget {
+  const _TransactionPeriodRow({required this.summary, required this.periodType});
+
+  final TransactionPeriodSummary summary;
+  final PeriodType periodType;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final semantic = theme.extension<AppSemanticColors>()!;
+    final label = _periodLabel(periodType, summary.periodStart);
+    final net = summary.creditTotal - summary.debitTotal;
+
+    return AppCard(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      onTap: () {
+        ref
+            .read(bankTransactionsControllerProvider.notifier)
+            .setPeriodFilter(
+              start: summary.periodStart,
+              end: periodType.endOf(summary.periodStart),
+              label: label,
+            );
+        ref.read(selectedVaultViewProvider.notifier).state =
+            VaultView.bankTransactions;
+        context.go(AppRoutes.vault);
+      },
+      child: Row(
+        children: [
+          IconChip(
+            icon: Icons.calendar_month_rounded,
+            colorKey: label,
+            size: 36,
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: theme.textTheme.titleSmall),
+                const SizedBox(height: 2),
+                Text(
+                  '${summary.transactionCount} transaction${summary.transactionCount == 1 ? '' : 's'}',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '${net >= 0 ? '+' : '-'}${_currencyFormat.format(net.abs())}',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  color: net >= 0 ? semantic.success : theme.colorScheme.error,
+                ),
+              ),
+              if (summary.needsReviewCount > 0) ...[
+                const SizedBox(height: 2),
+                Text(
+                  '${summary.needsReviewCount} to review',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: semantic.warning,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CounterpartyRow extends ConsumerWidget {
+  const _CounterpartyRow({required this.summary});
+
+  final CounterpartySummary summary;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final semantic = theme.extension<AppSemanticColors>()!;
+    final net = summary.creditTotal - summary.debitTotal;
+
+    return AppCard(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      onTap: () {
+        ref
+            .read(bankTransactionsControllerProvider.notifier)
+            .setSearchQuery(summary.counterpartyName);
+        ref.read(selectedVaultViewProvider.notifier).state =
+            VaultView.bankTransactions;
+        context.go(AppRoutes.vault);
+      },
+      child: Row(
+        children: [
+          IconChip(
+            icon: Icons.person_outline_rounded,
+            colorKey: summary.counterpartyName,
+            size: 36,
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  summary.counterpartyName,
+                  style: theme.textTheme.titleSmall,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${summary.transactionCount} transaction${summary.transactionCount == 1 ? '' : 's'}'
+                  '${summary.lastTransactionDate != null ? ' · last ${_dateFormat.format(summary.lastTransactionDate!)}' : ''}',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '${net >= 0 ? '+' : '-'}${_currencyFormat.format(net.abs())}',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  color: net >= 0 ? semantic.success : theme.colorScheme.error,
+                ),
               ),
               if (summary.needsReviewCount > 0) ...[
                 const SizedBox(height: 2),

@@ -15,7 +15,6 @@ class VaultRepositoryImpl implements VaultRepository {
   @override
   Future<Result<List<InvoiceSummary>>> listInvoices({
     required String organizationId,
-    required VaultFilter filter,
     required VaultSort sort,
     required int offset,
     required int limit,
@@ -27,14 +26,9 @@ class VaultRepositoryImpl implements VaultRepository {
       var query = _client
           .from('invoices')
           .select(
-            'id, invoice_number, invoice_date, total_amount, currency, document_type, verification_status, suppliers(name)',
+            'id, invoice_number, invoice_date, total_amount, currency, verification_status, suppliers(name)',
           )
           .eq('organization_id', organizationId);
-
-      final documentType = filter.documentType;
-      if (documentType != null) {
-        query = query.eq('document_type', documentType.value);
-      }
 
       if (periodStart != null) {
         query = query.gte('invoice_date', _dateOnly(periodStart));

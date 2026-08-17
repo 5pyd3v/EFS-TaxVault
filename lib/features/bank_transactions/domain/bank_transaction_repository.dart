@@ -5,12 +5,16 @@ import 'package:fbr_taxvault/features/bank_transactions/domain/bank_transaction_
 abstract interface class BankTransactionRepository {
   /// [searchQuery], when non-empty, matches counterparty name, bank name,
   /// or reference number — a plain deterministic Postgres ILIKE, same
-  /// rule as Vault's invoice search (spec §15).
+  /// rule as Vault's invoice search (spec §15). [periodStart]/[periodEnd]
+  /// restrict to `transaction_date` in `[periodStart, periodEnd)` — used
+  /// when a Reports period row is tapped to drill into its transactions.
   Future<Result<List<BankTransactionSummary>>> listTransactions({
     required String organizationId,
     required int offset,
     required int limit,
     String? searchQuery,
+    DateTime? periodStart,
+    DateTime? periodEnd,
   });
 
   Future<Result<BankTransactionDetail>> getDetail(String transactionId);

@@ -9,6 +9,7 @@ import 'package:fbr_taxvault/core/constants/app_constants.dart';
 import 'package:fbr_taxvault/core/router/app_routes.dart';
 import 'package:fbr_taxvault/core/theme/app_semantic_colors.dart';
 import 'package:fbr_taxvault/core/theme/app_spacing.dart';
+import 'package:fbr_taxvault/features/documents/presentation/document_viewer_screen.dart';
 import 'package:fbr_taxvault/features/fbr/presentation/fbr_submission_card.dart';
 import 'package:fbr_taxvault/features/invoices/domain/invoice_detail.dart';
 import 'package:fbr_taxvault/features/invoices/presentation/invoice_review_providers.dart';
@@ -195,6 +196,18 @@ class _InvoiceReviewScreenState extends ConsumerState<InvoiceReviewScreen> {
     return discard ?? false;
   }
 
+  void _viewOriginalDocument(InvoiceDetail detail) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => DocumentViewerScreen(
+          storagePath: detail.documentStoragePath!,
+          pageCount: detail.documentPageCount,
+          title: 'Original invoice',
+        ),
+      ),
+    );
+  }
+
   Future<void> _showCanonicalJson() async {
     final result = await ref
         .read(invoiceRepositoryProvider)
@@ -233,6 +246,12 @@ class _InvoiceReviewScreenState extends ConsumerState<InvoiceReviewScreen> {
         appBar: AppBar(
           title: const Text('Review Invoice'),
           actions: [
+            if (detailAsync.valueOrNull?.hasScannedDocument ?? false)
+              IconButton(
+                icon: const Icon(Icons.image_outlined),
+                tooltip: 'View original scan',
+                onPressed: () => _viewOriginalDocument(detailAsync.value!),
+              ),
             IconButton(
               icon: const Icon(Icons.data_object_rounded),
               tooltip: 'Export canonical JSON',

@@ -201,9 +201,6 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
   String _label(DocumentType type) {
     return switch (type) {
       DocumentType.invoice => 'Invoice',
-      DocumentType.receipt => 'Receipt',
-      DocumentType.taxDocument => 'Tax document',
-      DocumentType.other => 'Other',
       DocumentType.bankTransaction => 'Bank transaction',
     };
   }

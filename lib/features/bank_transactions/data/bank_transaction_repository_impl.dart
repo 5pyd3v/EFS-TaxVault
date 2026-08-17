@@ -18,6 +18,8 @@ class BankTransactionRepositoryImpl implements BankTransactionRepository {
     required int offset,
     required int limit,
     String? searchQuery,
+    DateTime? periodStart,
+    DateTime? periodEnd,
   }) async {
     try {
       var query = _client
@@ -26,6 +28,13 @@ class BankTransactionRepositoryImpl implements BankTransactionRepository {
             'id, direction, amount, currency, transaction_date, counterparty_name, bank_name, verification_status',
           )
           .eq('organization_id', organizationId);
+
+      if (periodStart != null) {
+        query = query.gte('transaction_date', periodStart.toIso8601String());
+      }
+      if (periodEnd != null) {
+        query = query.lt('transaction_date', periodEnd.toIso8601String());
+      }
 
       final trimmedQuery = searchQuery?.trim() ?? '';
       if (trimmedQuery.isNotEmpty) {
@@ -62,7 +71,7 @@ class BankTransactionRepositoryImpl implements BankTransactionRepository {
     try {
       final row = await _client
           .from('bank_transactions')
-          .select()
+          .select('*, documents(storage_path, page_count)')
           .eq('id', transactionId)
           .single();
       return Result.ok(BankTransactionDetail.fromMap(row));

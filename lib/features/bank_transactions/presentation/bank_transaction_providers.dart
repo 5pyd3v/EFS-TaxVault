@@ -41,6 +41,9 @@ final bankTransactionDetailProvider =
 class BankTransactionsState {
   const BankTransactionsState({
     this.searchQuery = '',
+    this.periodStart,
+    this.periodEnd,
+    this.periodLabel,
     this.items = const [],
     this.hasMore = true,
     this.isLoading = true,
@@ -49,6 +52,9 @@ class BankTransactionsState {
   });
 
   final String searchQuery;
+  final DateTime? periodStart;
+  final DateTime? periodEnd;
+  final String? periodLabel;
   final List<BankTransactionSummary> items;
   final bool hasMore;
   final bool isLoading;
@@ -64,6 +70,9 @@ class BankTransactionsState {
   }) {
     return BankTransactionsState(
       searchQuery: searchQuery,
+      periodStart: periodStart,
+      periodEnd: periodEnd,
+      periodLabel: periodLabel,
       items: items ?? this.items,
       hasMore: hasMore ?? this.hasMore,
       isLoading: isLoading ?? this.isLoading,
@@ -94,6 +103,9 @@ class BankTransactionsController extends Notifier<BankTransactionsState> {
 
     state = BankTransactionsState(
       searchQuery: state.searchQuery,
+      periodStart: state.periodStart,
+      periodEnd: state.periodEnd,
+      periodLabel: state.periodLabel,
       isLoading: true,
     );
     final result = await ref
@@ -101,6 +113,8 @@ class BankTransactionsController extends Notifier<BankTransactionsState> {
         .listTransactions(
           organizationId: organization.id,
           searchQuery: state.searchQuery,
+          periodStart: state.periodStart,
+          periodEnd: state.periodEnd,
           offset: 0,
           limit: pageSize,
         );
@@ -108,12 +122,18 @@ class BankTransactionsController extends Notifier<BankTransactionsState> {
     state = result.fold(
       (items) => BankTransactionsState(
         searchQuery: state.searchQuery,
+        periodStart: state.periodStart,
+        periodEnd: state.periodEnd,
+        periodLabel: state.periodLabel,
         items: items,
         isLoading: false,
         hasMore: items.length == pageSize,
       ),
       (failure) => BankTransactionsState(
         searchQuery: state.searchQuery,
+        periodStart: state.periodStart,
+        periodEnd: state.periodEnd,
+        periodLabel: state.periodLabel,
         isLoading: false,
         errorMessage: failure.message,
       ),
@@ -131,6 +151,8 @@ class BankTransactionsController extends Notifier<BankTransactionsState> {
         .listTransactions(
           organizationId: organization.id,
           searchQuery: state.searchQuery,
+          periodStart: state.periodStart,
+          periodEnd: state.periodEnd,
           offset: state.items.length,
           limit: pageSize,
         );
@@ -148,9 +170,36 @@ class BankTransactionsController extends Notifier<BankTransactionsState> {
 
   void setSearchQuery(String query) {
     if (query == state.searchQuery) return;
-    state = BankTransactionsState(searchQuery: query);
+    state = BankTransactionsState(
+      searchQuery: query,
+      periodStart: state.periodStart,
+      periodEnd: state.periodEnd,
+      periodLabel: state.periodLabel,
+    );
     _debounce?.cancel();
     _debounce = Timer(_searchDebounce, refresh);
+  }
+
+  /// Drill into a Reports period row — scopes the list to transactions
+  /// dated within `[start, end)` for that period.
+  void setPeriodFilter({
+    required DateTime start,
+    required DateTime end,
+    required String label,
+  }) {
+    state = BankTransactionsState(
+      searchQuery: '',
+      periodStart: start,
+      periodEnd: end,
+      periodLabel: label,
+    );
+    refresh();
+  }
+
+  void clearPeriodFilter() {
+    if (state.periodStart == null) return;
+    state = BankTransactionsState(searchQuery: state.searchQuery);
+    refresh();
   }
 }
 

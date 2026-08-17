@@ -24,12 +24,21 @@ import {
   INVOICE_EXTRACTION_PROMPT_VERSION,
 } from '../_shared/prompts/invoice_extraction_v2.ts';
 import { handleGeminiKeyError, resolveGeminiApiKey } from '../_shared/gemini_key.ts';
+import { fetchGeminiWithRetry } from '../_shared/gemini_fetch.ts';
 
 // An alias, not a pinned version — always resolves to Google's current
-// recommended flash model, so this doesn't silently break again the next
-// time a specific dated model is retired (as gemini-2.5-flash was for new
-// API keys).
+// recommended flash model. The tradeoff: right after Google ships a new
+// model generation, this alias can point at a freshly-launched,
+// under-provisioned model that returns sustained 503s for days before
+// Google scales up capacity (a well-documented recurring pattern, not
+// specific to this project). GEMINI_FALLBACK_MODEL below is the mitigation.
 const GEMINI_MODEL = 'gemini-flash-latest';
+// A pinned, established model to fall back to when the alias above is
+// overloaded — older models are typically better provisioned since demand
+// on them has already stabilized. Supported until 2026-10-16; if it starts
+// failing too, replace this with whatever Google's current stable
+// (non-preview) flash model is at that time.
+const GEMINI_FALLBACK_MODEL = 'gemini-2.5-flash';
 const CALCULATION_TOLERANCE = 1.0; // PKR — rounding slack before flagging a mismatch
 const DOCUMENT_BUCKET = 'documents';
 
@@ -131,7 +140,7 @@ Deno.serve(async (req) => {
     }
 
     const imageParts = await downloadPageImages(serviceClient, document.storage_path, document.page_count);
-    const extraction = await callGemini(geminiApiKey, imageParts);
+    const { data: extraction, model: modelUsed } = await callGemini(geminiApiKey, imageParts);
 
     if (!extraction.isInvoice) {
       await failJob(serviceClient, jobId, 'The scanned document does not appear to be an invoice or receipt.');
@@ -241,7 +250,7 @@ Deno.serve(async (req) => {
         organization_id: document.organization_id,
         job_id: jobId,
         invoice_id: invoice.id,
-        model: GEMINI_MODEL,
+        model: modelUsed,
         prompt_version: INVOICE_EXTRACTION_PROMPT_VERSION,
         schema_version: EXTRACTION_SCHEMA_VERSION,
         raw_response: extraction,
@@ -332,9 +341,26 @@ async function downloadPageImages(
 async function callGemini(
   apiKey: string,
   images: { mimeType: string; data: string }[],
+): Promise<{ data: InvoiceExtractionResult; model: string }> {
+  try {
+    return { data: await callGeminiModel(GEMINI_MODEL, apiKey, images), model: GEMINI_MODEL };
+  } catch (error) {
+    const status = (error as { status?: number } | null)?.status;
+    if (status !== 503) throw error;
+    return {
+      data: await callGeminiModel(GEMINI_FALLBACK_MODEL, apiKey, images),
+      model: GEMINI_FALLBACK_MODEL,
+    };
+  }
+}
+
+async function callGeminiModel(
+  model: string,
+  apiKey: string,
+  images: { mimeType: string; data: string }[],
 ): Promise<InvoiceExtractionResult> {
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
+  const response = await fetchGeminiWithRetry(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },

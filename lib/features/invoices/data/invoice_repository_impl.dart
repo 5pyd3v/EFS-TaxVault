@@ -19,7 +19,7 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
       final results = await Future.wait([
         _client
             .from('invoices')
-            .select('*, suppliers(name)')
+            .select('*, suppliers(name), documents(storage_path, page_count)')
             .eq('id', invoiceId)
             .single(),
         _client

@@ -10,7 +10,6 @@ abstract interface class VaultRepository {
   /// Reports period row is tapped to drill into its invoices.
   Future<Result<List<InvoiceSummary>>> listInvoices({
     required String organizationId,
-    required VaultFilter filter,
     required VaultSort sort,
     required int offset,
     required int limit,

@@ -3,12 +3,20 @@ import 'package:fbr_taxvault/core/network/supabase_providers.dart';
 import 'package:fbr_taxvault/features/auth/presentation/auth_providers.dart';
 import 'package:fbr_taxvault/features/reports/data/report_export_service.dart';
 import 'package:fbr_taxvault/features/reports/data/reports_repository_impl.dart';
+import 'package:fbr_taxvault/features/reports/domain/counterparty_summary.dart';
 import 'package:fbr_taxvault/features/reports/domain/period_summary.dart';
 import 'package:fbr_taxvault/features/reports/domain/period_type.dart';
 import 'package:fbr_taxvault/features/reports/domain/reports_repository.dart';
 import 'package:fbr_taxvault/features/reports/domain/supplier_summary.dart';
+import 'package:fbr_taxvault/features/reports/domain/transaction_period_summary.dart';
 
-enum ReportView { byPeriod, bySupplier }
+/// Which top-level dataset Reports is showing — mirrors Vault's
+/// Documents/Bank Transactions segmented toggle.
+enum ReportDomain { invoices, bankTransactions }
+
+/// Within a domain, group by period or by the "who" dimension (supplier for
+/// invoices, counterparty for bank transactions).
+enum ReportView { byPeriod, byGroup }
 
 final reportsRepositoryProvider = Provider<ReportsRepository>((ref) {
   return ReportsRepositoryImpl(ref.watch(supabaseClientProvider));
@@ -21,6 +29,9 @@ final reportExportServiceProvider = Provider<ReportExportService>((ref) {
   );
 });
 
+final selectedReportDomainProvider = StateProvider<ReportDomain>(
+  (ref) => ReportDomain.invoices,
+);
 final selectedReportViewProvider = StateProvider<ReportView>(
   (ref) => ReportView.byPeriod,
 );
@@ -28,9 +39,10 @@ final selectedPeriodTypeProvider = StateProvider<PeriodType>(
   (ref) => PeriodType.monthly,
 );
 
-/// Filters the already-fetched period/supplier lists client-side — both are
-/// small aggregate lists (dozens of suppliers, at most a few dozen
-/// periods), so there's no need for a round trip per keystroke.
+/// Filters the already-fetched period/group lists client-side — every one
+/// of these is a small aggregate list (dozens of suppliers/counterparties,
+/// at most a few dozen periods), so there's no need for a round trip per
+/// keystroke.
 final reportsSearchQueryProvider = StateProvider<String>((ref) => '');
 
 final periodSummariesProvider = FutureProvider<List<PeriodSummary>>((
@@ -57,3 +69,33 @@ final supplierSummariesProvider = FutureProvider<List<SupplierSummary>>((
       .getSupplierSummaries(organizationId: org.id);
   return result.fold((summaries) => summaries, (failure) => throw failure);
 });
+
+final transactionPeriodSummariesProvider =
+    FutureProvider<List<TransactionPeriodSummary>>((ref) async {
+      final org = ref.watch(currentOrganizationProvider);
+      final periodType = ref.watch(selectedPeriodTypeProvider);
+      if (org == null) return const [];
+
+      final result = await ref
+          .watch(reportsRepositoryProvider)
+          .getTransactionPeriodSummaries(
+            organizationId: org.id,
+            periodType: periodType,
+          );
+      return result.fold(
+        (summaries) => summaries,
+        (failure) => throw failure,
+      );
+    });
+
+final counterpartySummariesProvider = FutureProvider<List<CounterpartySummary>>(
+  (ref) async {
+    final org = ref.watch(currentOrganizationProvider);
+    if (org == null) return const [];
+
+    final result = await ref
+        .watch(reportsRepositoryProvider)
+        .getCounterpartySummaries(organizationId: org.id);
+    return result.fold((summaries) => summaries, (failure) => throw failure);
+  },
+);

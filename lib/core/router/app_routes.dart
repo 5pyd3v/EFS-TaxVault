@@ -15,7 +15,17 @@ abstract final class AppRoutes {
   static const profile = '/profile';
   static const notifications = '/notifications';
 
+  static const bankTransactions = '/bank-transactions';
+  static const bankTransactionProcessingPattern =
+      '/bank-transactions/processing/:documentId';
+  static const bankTransactionReviewPattern =
+      '/bank-transactions/:transactionId/review';
+
   static String processing(String documentId) => '/scan/processing/$documentId';
   static String invoiceReview(String invoiceId) =>
       '/invoices/$invoiceId/review';
+  static String bankTransactionProcessing(String documentId) =>
+      '/bank-transactions/processing/$documentId';
+  static String bankTransactionReview(String transactionId) =>
+      '/bank-transactions/$transactionId/review';
 }

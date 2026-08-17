@@ -2,7 +2,8 @@ enum DocumentType {
   invoice('invoice'),
   receipt('receipt'),
   taxDocument('tax_document'),
-  other('other');
+  other('other'),
+  bankTransaction('bank_transaction');
 
   const DocumentType(this.value);
 

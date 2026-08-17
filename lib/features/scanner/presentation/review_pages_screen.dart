@@ -35,7 +35,10 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
 
     if (!mounted) return;
     if (documentId != null) {
-      router.pushReplacement(AppRoutes.processing(documentId));
+      final route = _documentType == DocumentType.bankTransaction
+          ? AppRoutes.bankTransactionProcessing(documentId)
+          : AppRoutes.processing(documentId);
+      router.pushReplacement(route);
     }
   }
 
@@ -143,12 +146,16 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
                   Expanded(
                     child: DropdownButtonFormField<DocumentType>(
                       initialValue: _documentType,
+                      isExpanded: true,
                       decoration: const InputDecoration(labelText: 'Type'),
                       items: DocumentType.values
                           .map(
                             (t) => DropdownMenuItem(
                               value: t,
-                              child: Text(_label(t)),
+                              child: Text(
+                                _label(t),
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                           )
                           .toList(),
@@ -197,6 +204,7 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
       DocumentType.receipt => 'Receipt',
       DocumentType.taxDocument => 'Tax document',
       DocumentType.other => 'Other',
+      DocumentType.bankTransaction => 'Bank transaction',
     };
   }
 }

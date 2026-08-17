@@ -170,3 +170,64 @@ export interface ItemExtraction {
   taxAmount?: number;
   totalAmount?: number;
 }
+
+// Bank/wallet transaction confirmation receipts — a separate, much flatter
+// shape than an invoice (see bank_transaction_extraction_v1.ts prompt).
+export const bankTransactionExtractionResponseSchema = {
+  type: 'OBJECT',
+  properties: {
+    isBankTransaction: { type: 'BOOLEAN' },
+    direction: {
+      type: 'STRING',
+      enum: ['debit', 'credit'],
+      description: '"debit" if money left the account holder\'s account, "credit" if received.',
+    },
+    amount: { type: 'NUMBER', description: 'Numeric only, strip currency symbols and thousands separators.' },
+    currency: { type: 'STRING' },
+    transactionDate: {
+      type: 'STRING',
+      description:
+        'ISO 8601. Include time as HH:mm:ss when visible (e.g. "2026-08-06T17:59:00"), otherwise just "YYYY-MM-DD".',
+    },
+    counterpartyName: { type: 'STRING' },
+    counterpartyAccount: {
+      type: 'STRING',
+      description: 'Account number/IBAN as printed, including any masking — do not unmask.',
+    },
+    bankName: { type: 'STRING' },
+    referenceNumber: { type: 'STRING' },
+    status: { type: 'STRING' },
+    fullText: {
+      type: 'STRING',
+      description:
+        'A raw transcript of every line of visible text on the receipt, top to bottom, one line per newline. Used as a safety net to recover a field programmatically if it was missed above — always populate this even if every structured field above was filled in confidently.',
+    },
+    confidence: {
+      type: 'OBJECT',
+      description: 'Score 0-1 per field, only for fields actually populated above.',
+      properties: {
+        direction: { type: 'NUMBER' },
+        amount: { type: 'NUMBER' },
+        transactionDate: { type: 'NUMBER' },
+        counterpartyName: { type: 'NUMBER' },
+        referenceNumber: { type: 'NUMBER' },
+      },
+    },
+  },
+  required: ['isBankTransaction'],
+};
+
+export interface BankTransactionExtractionResult {
+  isBankTransaction: boolean;
+  direction?: 'debit' | 'credit';
+  amount?: number;
+  currency?: string;
+  transactionDate?: string;
+  counterpartyName?: string;
+  counterpartyAccount?: string;
+  bankName?: string;
+  referenceNumber?: string;
+  status?: string;
+  fullText?: string;
+  confidence?: Record<string, number>;
+}

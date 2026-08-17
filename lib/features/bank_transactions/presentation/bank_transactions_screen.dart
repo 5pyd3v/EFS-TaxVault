@@ -2,15 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:fbr_taxvault/core/router/app_routes.dart';
 import 'package:fbr_taxvault/core/theme/app_semantic_colors.dart';
 import 'package:fbr_taxvault/core/theme/app_spacing.dart';
-import 'package:fbr_taxvault/features/invoices/presentation/invoice_review_providers.dart';
-import 'package:fbr_taxvault/features/vault/domain/invoice_summary.dart';
-import 'package:fbr_taxvault/features/vault/domain/vault_filter.dart';
-import 'package:fbr_taxvault/features/vault/presentation/vault_controller.dart';
-import 'package:fbr_taxvault/shared/domain/document_type.dart';
-import 'package:fbr_taxvault/shared/providers/invoice_mutation_effects.dart';
+import 'package:fbr_taxvault/features/auth/presentation/auth_providers.dart';
+import 'package:fbr_taxvault/features/bank_transactions/domain/bank_transaction_summary.dart';
+import 'package:fbr_taxvault/features/bank_transactions/presentation/bank_transaction_providers.dart';
 import 'package:fbr_taxvault/shared/widgets/app_card.dart';
 import 'package:fbr_taxvault/shared/widgets/empty_state.dart';
 import 'package:fbr_taxvault/shared/widgets/icon_chip.dart';
@@ -23,31 +21,33 @@ final _currencyFormat = NumberFormat.currency(
 );
 final _dateFormat = DateFormat('d MMM yyyy');
 
-class VaultScreen extends ConsumerStatefulWidget {
-  const VaultScreen({super.key});
+/// The "separate view" for bank/wallet transaction receipts — deliberately
+/// its own screen, not mixed into the Vault invoices list, reached from a
+/// link on Profile.
+class BankTransactionsScreen extends ConsumerStatefulWidget {
+  const BankTransactionsScreen({super.key});
 
   @override
-  ConsumerState<VaultScreen> createState() => _VaultScreenState();
+  ConsumerState<BankTransactionsScreen> createState() =>
+      _BankTransactionsScreenState();
 }
 
-class _VaultScreenState extends ConsumerState<VaultScreen> {
+class _BankTransactionsScreenState
+    extends ConsumerState<BankTransactionsScreen> {
   final _scrollController = ScrollController();
   final _searchController = TextEditingController();
+  bool _isExporting = false;
 
   @override
   void initState() {
     super.initState();
-    // Reports' "By supplier" cards set the search query before navigating
-    // here (see reports_screen.dart) — pick that up so the field shows
-    // what's actually being searched instead of appearing empty.
-    _searchController.text = ref.read(vaultControllerProvider).searchQuery;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(vaultControllerProvider.notifier).refresh();
+      ref.read(bankTransactionsControllerProvider.notifier).refresh();
     });
     _scrollController.addListener(() {
       if (_scrollController.position.pixels >
           _scrollController.position.maxScrollExtent - 300) {
-        ref.read(vaultControllerProvider.notifier).loadMore();
+        ref.read(bankTransactionsControllerProvider.notifier).loadMore();
       }
     });
   }
@@ -59,33 +59,62 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
     super.dispose();
   }
 
+  Future<void> _exportToExcel() async {
+    final organization = ref.read(currentOrganizationProvider);
+    if (organization == null || _isExporting) return;
+
+    setState(() => _isExporting = true);
+    final result = await ref
+        .read(bankTransactionExportServiceProvider)
+        .exportToExcel(organization.id);
+
+    if (!mounted) return;
+    setState(() => _isExporting = false);
+
+    result.fold(
+      (file) {
+        SharePlus.instance.share(
+          ShareParams(
+            files: [
+              XFile(
+                file.path,
+                mimeType:
+                    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+              ),
+            ],
+            subject: 'EFS TaxVault — Bank Transactions',
+            text: 'Your bank transactions report is attached.',
+          ),
+        );
+      },
+      (failure) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(failure.message)));
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final state = ref.watch(vaultControllerProvider);
-    final controller = ref.read(vaultControllerProvider.notifier);
-
-    // Reports' period/supplier cards set the search/period filter before
-    // navigating here — this screen lives inside the bottom-nav shell's
-    // IndexedStack so initState only runs once, meaning the visible field
-    // won't otherwise pick up a query set on a later navigation.
-    if (_searchController.text != state.searchQuery) {
-      _searchController.text = state.searchQuery;
-    }
+    final state = ref.watch(bankTransactionsControllerProvider);
+    final controller = ref.read(bankTransactionsControllerProvider.notifier);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Vault'),
+        title: const Text('Bank Transactions'),
         actions: [
-          PopupMenuButton<VaultSort>(
-            initialValue: state.sort,
-            onSelected: controller.setSort,
-            icon: const Icon(Icons.sort_rounded),
-            itemBuilder: (context) => VaultSort.values
-                .map(
-                  (sort) => PopupMenuItem(value: sort, child: Text(sort.label)),
-                )
-                .toList(),
+          IconButton(
+            icon: _isExporting
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.ios_share_rounded),
+            tooltip: 'Export to Excel',
+            onPressed: _isExporting ? null : _exportToExcel,
           ),
         ],
       ),
@@ -102,7 +131,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
               controller: _searchController,
               onChanged: controller.setSearchQuery,
               decoration: InputDecoration(
-                hintText: 'Search invoice number or supplier',
+                hintText: 'Search counterparty, bank, or reference',
                 prefixIcon: const Icon(Icons.search_rounded, size: 20),
                 suffixIcon: state.searchQuery.isEmpty
                     ? null
@@ -116,41 +145,6 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
               ),
             ),
           ),
-          if (state.periodLabel != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.lg,
-                0,
-                AppSpacing.lg,
-                AppSpacing.md,
-              ),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: InputChip(
-                  avatar: const Icon(Icons.calendar_month_rounded, size: 16),
-                  label: Text('Period: ${state.periodLabel}'),
-                  onDeleted: controller.clearPeriodFilter,
-                ),
-              ),
-            ),
-          SizedBox(
-            height: 44,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-              itemCount: VaultFilter.values.length,
-              separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.sm),
-              itemBuilder: (context, index) {
-                final filter = VaultFilter.values[index];
-                return ChoiceChip(
-                  label: Text(filter.label),
-                  selected: state.filter == filter,
-                  onSelected: (_) => controller.setFilter(filter),
-                );
-              },
-            ),
-          ),
-          const Divider(height: 1),
           Expanded(
             child: RefreshIndicator(
               onRefresh: controller.refresh,
@@ -162,7 +156,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
     );
   }
 
-  Widget _buildBody(ThemeData theme, VaultState state) {
+  Widget _buildBody(ThemeData theme, BankTransactionsState state) {
     if (state.isLoading) {
       return const ListSkeleton();
     }
@@ -173,34 +167,29 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
           const SizedBox(height: AppSpacing.giant),
           EmptyState(
             icon: Icons.error_outline_rounded,
-            title: 'Could not load your vault',
+            title: 'Could not load your transactions',
             message: state.errorMessage!,
             actionLabel: 'Retry',
             onAction: () =>
-                ref.read(vaultControllerProvider.notifier).refresh(),
+                ref.read(bankTransactionsControllerProvider.notifier).refresh(),
           ),
         ],
       );
     }
     if (state.items.isEmpty) {
       final searching = state.searchQuery.trim().isNotEmpty;
-      final filteringByPeriod = state.periodLabel != null;
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         children: [
           const SizedBox(height: AppSpacing.giant),
           EmptyState(
-            icon: searching || filteringByPeriod
+            icon: searching
                 ? Icons.search_off_rounded
-                : Icons.folder_open_outlined,
-            title: searching || filteringByPeriod
-                ? 'No matches'
-                : 'No documents here yet',
+                : Icons.account_balance_wallet_outlined,
+            title: searching ? 'No matches' : 'No transactions yet',
             message: searching
-                ? 'No invoices match "${state.searchQuery}".'
-                : filteringByPeriod
-                ? 'No invoices found for ${state.periodLabel}.'
-                : 'Scan your first invoice and TaxVault will organize the rest.',
+                ? 'No transactions match "${state.searchQuery}".'
+                : 'Scan a bank receipt from the Scan tab and TaxVault will keep track of it here.',
           ),
         ],
       );
@@ -219,32 +208,36 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
             child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
           );
         }
-        return _InvoiceTile(invoice: state.items[index]);
+        return _TransactionTile(transaction: state.items[index]);
       },
     );
   }
 }
 
-class _InvoiceTile extends ConsumerWidget {
-  const _InvoiceTile({required this.invoice});
+class _TransactionTile extends ConsumerWidget {
+  const _TransactionTile({required this.transaction});
 
-  final InvoiceSummary invoice;
+  final BankTransactionSummary transaction;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final semantic = theme.extension<AppSemanticColors>()!;
-    final (statusColor, statusLabel) = switch (invoice.verificationStatus) {
+    final isCredit = transaction.direction == 'credit';
+    final amountColor = isCredit
+        ? semantic.success
+        : theme.colorScheme.onSurface;
+    final (statusColor, statusLabel) = switch (transaction.verificationStatus) {
       'verified' => (semantic.success, 'Verified'),
       'rejected' => (theme.colorScheme.error, 'Rejected'),
       _ => (semantic.warning, 'Needs review'),
     };
 
     return Dismissible(
-      key: ValueKey(invoice.id),
+      key: ValueKey(transaction.id),
       direction: DismissDirection.endToStart,
       confirmDismiss: (_) => _confirmDelete(context),
-      onDismissed: (_) => _deleteInvoice(context, ref),
+      onDismissed: (_) => _deleteTransaction(context, ref),
       background: Container(
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
@@ -255,13 +248,16 @@ class _InvoiceTile extends ConsumerWidget {
         child: const Icon(Icons.delete_outline_rounded, color: Colors.white),
       ),
       child: AppCard(
-        onTap: () => context.push(AppRoutes.invoiceReview(invoice.id)),
+        onTap: () =>
+            context.push(AppRoutes.bankTransactionReview(transaction.id)),
         padding: const EdgeInsets.all(AppSpacing.md),
         child: Row(
           children: [
             IconChip(
-              icon: _iconFor(invoice.documentType),
-              colorKey: invoice.supplierName,
+              icon: isCredit
+                  ? Icons.call_received_rounded
+                  : Icons.call_made_rounded,
+              colorKey: transaction.counterpartyName,
             ),
             const SizedBox(width: AppSpacing.md),
             Expanded(
@@ -269,7 +265,7 @@ class _InvoiceTile extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    invoice.supplierName,
+                    transaction.counterpartyName,
                     style: theme.textTheme.titleSmall,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -277,10 +273,9 @@ class _InvoiceTile extends ConsumerWidget {
                   const SizedBox(height: 2),
                   Text(
                     [
-                      if (invoice.invoiceNumber.isNotEmpty)
-                        '#${invoice.invoiceNumber}',
-                      if (invoice.invoiceDate != null)
-                        _dateFormat.format(invoice.invoiceDate!),
+                      if (transaction.bankName.isNotEmpty) transaction.bankName,
+                      if (transaction.transactionDate != null)
+                        _dateFormat.format(transaction.transactionDate!),
                     ].join(' · '),
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
@@ -294,8 +289,10 @@ class _InvoiceTile extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  _currencyFormat.format(invoice.totalAmount),
-                  style: theme.textTheme.titleMedium,
+                  '${isCredit ? '+' : '-'}${_currencyFormat.format(transaction.amount)}',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: amountColor,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Container(
@@ -326,9 +323,9 @@ class _InvoiceTile extends ConsumerWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete invoice?'),
+        title: const Text('Delete transaction?'),
         content: Text(
-          'Remove "${invoice.supplierName}" and its scanned pages? This can\'t be undone.',
+          'Remove "${transaction.counterpartyName}" and its scanned pages? This can\'t be undone.',
         ),
         actions: [
           TextButton(
@@ -348,34 +345,21 @@ class _InvoiceTile extends ConsumerWidget {
     return confirmed ?? false;
   }
 
-  Future<void> _deleteInvoice(BuildContext context, WidgetRef ref) async {
+  Future<void> _deleteTransaction(BuildContext context, WidgetRef ref) async {
     final result = await ref
-        .read(invoiceRepositoryProvider)
-        .deleteInvoice(invoice.id);
-    ref.invalidate(invoiceDetailProvider(invoice.id));
+        .read(bankTransactionRepositoryProvider)
+        .deleteTransaction(transaction.id);
+    ref.invalidate(bankTransactionDetailProvider(transaction.id));
     if (context.mounted) {
       result.fold(
         (_) => ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
-          ..showSnackBar(const SnackBar(content: Text('Invoice deleted.'))),
+          ..showSnackBar(const SnackBar(content: Text('Transaction deleted.'))),
         (failure) => ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
           ..showSnackBar(SnackBar(content: Text(failure.message))),
       );
     }
-    // Re-syncs with the server either way: fixes pagination offsets after a
-    // real delete, and restores the row if the delete actually failed. Also
-    // refreshes Dashboard/Reports so a deleted invoice doesn't linger there.
-    refreshInvoiceDependentState(ref);
-  }
-
-  IconData _iconFor(DocumentType type) {
-    return switch (type) {
-      DocumentType.invoice => Icons.receipt_long_outlined,
-      DocumentType.receipt => Icons.receipt_outlined,
-      DocumentType.taxDocument => Icons.account_balance_outlined,
-      DocumentType.other => Icons.description_outlined,
-      DocumentType.bankTransaction => Icons.account_balance_wallet_outlined,
-    };
+    ref.read(bankTransactionsControllerProvider.notifier).refresh();
   }
 }

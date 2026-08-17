@@ -109,6 +109,13 @@ class ProfileScreen extends ConsumerWidget {
                     : 'All caught up',
                 onTap: () => context.push(AppRoutes.notifications),
               ),
+              _SettingsTile(
+                icon: Icons.account_balance_wallet_outlined,
+                iconColorKey: 'bank_transactions',
+                title: 'Bank Transactions',
+                subtitle: 'Scan and track payment receipts',
+                onTap: () => context.push(AppRoutes.bankTransactions),
+              ),
             ],
           ),
           const SizedBox(height: AppSpacing.xxl),

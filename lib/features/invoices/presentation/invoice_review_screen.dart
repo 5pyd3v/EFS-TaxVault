@@ -95,6 +95,11 @@ class _InvoiceReviewScreenState extends ConsumerState<InvoiceReviewScreen> {
 
     result.fold(
       (_) {
+        // Without this, revisiting this invoice would keep showing the
+        // pre-confirm state — the detail provider is a plain (non-
+        // autoDispose) FutureProvider.family, so it caches the response
+        // forever unless explicitly invalidated after a mutation.
+        ref.invalidate(invoiceDetailProvider(widget.invoiceId));
         refreshInvoiceDependentState(ref);
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
@@ -123,6 +128,7 @@ class _InvoiceReviewScreenState extends ConsumerState<InvoiceReviewScreen> {
 
     result.fold(
       (_) {
+        ref.invalidate(invoiceDetailProvider(widget.invoiceId));
         refreshInvoiceDependentState(ref);
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()

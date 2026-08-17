@@ -8,6 +8,9 @@ import 'package:fbr_taxvault/features/auth/presentation/onboarding_screen.dart';
 import 'package:fbr_taxvault/features/auth/presentation/sign_in_screen.dart';
 import 'package:fbr_taxvault/features/auth/presentation/sign_up_screen.dart';
 import 'package:fbr_taxvault/features/ai/presentation/processing_screen.dart';
+import 'package:fbr_taxvault/features/bank_transactions/presentation/bank_transaction_processing_screen.dart';
+import 'package:fbr_taxvault/features/bank_transactions/presentation/bank_transaction_review_screen.dart';
+import 'package:fbr_taxvault/features/bank_transactions/presentation/bank_transactions_screen.dart';
 import 'package:fbr_taxvault/features/dashboard/presentation/dashboard_screen.dart';
 import 'package:fbr_taxvault/features/invoices/presentation/invoice_review_screen.dart';
 import 'package:fbr_taxvault/features/notifications/presentation/notifications_screen.dart';
@@ -62,6 +65,22 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.notifications,
         builder: (_, _) => const NotificationsScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.bankTransactions,
+        builder: (_, _) => const BankTransactionsScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.bankTransactionProcessingPattern,
+        builder: (_, state) => BankTransactionProcessingScreen(
+          documentId: state.pathParameters['documentId']!,
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.bankTransactionReviewPattern,
+        builder: (_, state) => BankTransactionReviewScreen(
+          transactionId: state.pathParameters['transactionId']!,
+        ),
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) =>

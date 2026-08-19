@@ -225,7 +225,11 @@ class _CurvedHeroCard extends StatelessWidget {
             AppSpacing.xxl,
             AppSpacing.xl,
             AppSpacing.xxl,
-            AppSpacing.giant,
+            // Deliberately generous: the floating _QuickActionsBar overlaps
+            // up into this card by its own height minus its -32 bottom
+            // offset (~50px) — this padding has to clear that zone or the
+            // card's own text ends up hidden underneath the floating bar.
+            AppSpacing.giant + AppSpacing.xxxl,
           ),
           decoration: const BoxDecoration(gradient: AppGradients.blue),
           child: Column(
@@ -425,7 +429,9 @@ class _ApiKeyNudgeBanner extends ConsumerWidget {
     final organization = ref.watch(currentOrganizationProvider);
     if (organization == null) return const SizedBox.shrink();
 
-    final status = ref.watch(geminiKeyStatusProvider(organization.id)).valueOrNull;
+    final status = ref
+        .watch(geminiKeyStatusProvider(organization.id))
+        .valueOrNull;
     if (status == null || status.hasKey) return const SizedBox.shrink();
 
     final theme = Theme.of(context);
@@ -473,8 +479,9 @@ class _ApiKeyNudgeBanner extends ConsumerWidget {
 }
 
 /// Replaces the old two-square-tile layout with one card, two tappable
-/// rows — denser, more like a real "things that need you" list than a
-/// wall of boxes.
+/// Two colorful tiles instead of a plain list — a bold gradient when there's
+/// something to act on, a soft tint when there isn't, so color itself
+/// carries the "does this need me" signal rather than just a number.
 class _InsightsCard extends StatelessWidget {
   const _InsightsCard({required this.summary});
 
@@ -485,33 +492,37 @@ class _InsightsCard extends StatelessWidget {
     final theme = Theme.of(context);
     final semantic = theme.extension<AppSemanticColors>()!;
 
-    return AppCard(
-      padding: EdgeInsets.zero,
-      child: Column(
+    // IntrinsicHeight gives the Row a real height to stretch its children
+    // against — without it, `stretch` inside this unbounded-height Column
+    // (a scrollable sliver, not a fixed-size parent) fails to lay out at
+    // all, silently collapsing this widget and everything after it in the
+    // same Column to zero height.
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _InsightRow(
-            icon: Icons.fact_check_outlined,
-            iconColor: summary.pendingVerification > 0
-                ? semantic.warning
-                : theme.colorScheme.onSurfaceVariant,
-            label: 'Pending verification',
-            count: summary.pendingVerification,
-            onTap: () => context.go(AppRoutes.vault),
+          Expanded(
+            child: _InsightTile(
+              icon: Icons.fact_check_rounded,
+              label: 'Pending verification',
+              count: summary.pendingVerification,
+              gradient: AppGradients.amber,
+              tintColor: semantic.warning,
+              tintContainer: semantic.warningContainer,
+              onTap: () => context.go(AppRoutes.vault),
+            ),
           ),
-          Divider(
-            height: 1,
-            indent: AppSpacing.lg,
-            endIndent: AppSpacing.lg,
-            color: theme.colorScheme.outline,
-          ),
-          _InsightRow(
-            icon: Icons.error_outline_rounded,
-            iconColor: summary.potentialIssues > 0
-                ? theme.colorScheme.error
-                : theme.colorScheme.onSurfaceVariant,
-            label: 'Potential issues',
-            count: summary.potentialIssues,
-            onTap: () => context.go(AppRoutes.vault),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: _InsightTile(
+              icon: Icons.error_rounded,
+              label: 'Potential issues',
+              count: summary.potentialIssues,
+              gradient: AppGradients.coral,
+              tintColor: theme.colorScheme.error,
+              tintContainer: theme.colorScheme.errorContainer,
+              onTap: () => context.go(AppRoutes.vault),
+            ),
           ),
         ],
       ),
@@ -519,48 +530,92 @@ class _InsightsCard extends StatelessWidget {
   }
 }
 
-class _InsightRow extends StatelessWidget {
-  const _InsightRow({
+class _InsightTile extends StatelessWidget {
+  const _InsightTile({
     required this.icon,
-    required this.iconColor,
     required this.label,
     required this.count,
+    required this.gradient,
+    required this.tintColor,
+    required this.tintContainer,
     required this.onTap,
   });
 
   final IconData icon;
-  final Color iconColor;
   final String label;
   final int count;
+  final Gradient gradient;
+  final Color tintColor;
+  final Color tintContainer;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.lg),
-        child: Row(
-          children: [
-            IconChip(icon: icon, color: iconColor, size: 40),
-            const SizedBox(width: AppSpacing.md),
-            Expanded(child: Text(label, style: theme.textTheme.titleSmall)),
-            Text(
-              '$count',
-              style: theme.textTheme.headlineSmall?.copyWith(
-                color: count > 0
-                    ? iconColor
-                    : theme.colorScheme.onSurfaceVariant,
+    final active = count > 0;
+
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          decoration: BoxDecoration(
+            gradient: active ? gradient : null,
+            color: active ? null : tintContainer,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: active
+                ? [
+                    BoxShadow(
+                      color: tintColor.withValues(alpha: 0.35),
+                      blurRadius: 18,
+                      offset: const Offset(0, 8),
+                      spreadRadius: -8,
+                    ),
+                  ]
+                : null,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Icon(
+                    icon,
+                    color: active ? Colors.white : tintColor,
+                    size: 22,
+                  ),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    size: 18,
+                    color: active
+                        ? Colors.white.withValues(alpha: 0.8)
+                        : theme.colorScheme.onSurfaceVariant,
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(width: 4),
-            Icon(
-              Icons.chevron_right_rounded,
-              size: 18,
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ],
+              const SizedBox(height: AppSpacing.lg),
+              Text(
+                '$count',
+                style: theme.textTheme.headlineMedium?.copyWith(
+                  color: active ? Colors.white : theme.colorScheme.onSurface,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                label,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: active
+                      ? Colors.white.withValues(alpha: 0.9)
+                      : theme.colorScheme.onSurfaceVariant,
+                ),
+                maxLines: 2,
+              ),
+            ],
+          ),
         ),
       ),
     );

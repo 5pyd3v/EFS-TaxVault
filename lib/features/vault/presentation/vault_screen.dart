@@ -16,6 +16,7 @@ import 'package:fbr_taxvault/features/vault/presentation/vault_controller.dart';
 import 'package:fbr_taxvault/features/vault/presentation/vault_providers.dart';
 import 'package:fbr_taxvault/shared/providers/invoice_mutation_effects.dart';
 import 'package:fbr_taxvault/shared/widgets/app_card.dart';
+import 'package:fbr_taxvault/shared/widgets/app_segmented_toggle.dart';
 import 'package:fbr_taxvault/shared/widgets/empty_state.dart';
 import 'package:fbr_taxvault/shared/widgets/icon_chip.dart';
 import 'package:fbr_taxvault/shared/widgets/list_skeleton.dart';
@@ -156,21 +157,22 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
               AppSpacing.lg,
               AppSpacing.md,
             ),
-            child: SegmentedButton<VaultView>(
+            child: AppSegmentedToggle<VaultView>(
               segments: const [
-                ButtonSegment(
+                AppToggleSegment(
                   value: VaultView.documents,
-                  label: Text('Documents'),
+                  label: 'Documents',
+                  icon: Icons.folder_rounded,
                 ),
-                ButtonSegment(
+                AppToggleSegment(
                   value: VaultView.bankTransactions,
-                  label: Text('Bank Transactions'),
+                  label: 'Bank Transactions',
+                  icon: Icons.account_balance_wallet_rounded,
                 ),
               ],
-              selected: {view},
-              onSelectionChanged: (selection) =>
-                  ref.read(selectedVaultViewProvider.notifier).state =
-                      selection.first,
+              selected: view,
+              onChanged: (value) =>
+                  ref.read(selectedVaultViewProvider.notifier).state = value,
             ),
           ),
           Expanded(

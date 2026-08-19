@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:fbr_taxvault/core/router/app_routes.dart';
+import 'package:fbr_taxvault/core/theme/app_gradients.dart';
 import 'package:fbr_taxvault/core/theme/app_semantic_colors.dart';
 import 'package:fbr_taxvault/core/theme/app_spacing.dart';
 import 'package:fbr_taxvault/features/auth/presentation/auth_providers.dart';
@@ -17,6 +18,7 @@ import 'package:fbr_taxvault/features/reports/presentation/reports_providers.dar
 import 'package:fbr_taxvault/features/vault/presentation/vault_controller.dart';
 import 'package:fbr_taxvault/features/vault/presentation/vault_providers.dart';
 import 'package:fbr_taxvault/shared/widgets/app_card.dart';
+import 'package:fbr_taxvault/shared/widgets/app_segmented_toggle.dart';
 import 'package:fbr_taxvault/shared/widgets/async_value_view.dart';
 import 'package:fbr_taxvault/shared/widgets/empty_state.dart';
 import 'package:fbr_taxvault/shared/widgets/icon_chip.dart';
@@ -139,21 +141,23 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
               AppSpacing.lg,
               AppSpacing.md,
             ),
-            child: SegmentedButton<ReportDomain>(
+            child: AppSegmentedToggle<ReportDomain>(
               segments: const [
-                ButtonSegment(
+                AppToggleSegment(
                   value: ReportDomain.invoices,
-                  label: Text('Invoices'),
+                  label: 'Invoices',
+                  icon: Icons.receipt_long_rounded,
                 ),
-                ButtonSegment(
+                AppToggleSegment(
                   value: ReportDomain.bankTransactions,
-                  label: Text('Bank Transactions'),
+                  label: 'Bank Transactions',
+                  icon: Icons.account_balance_wallet_rounded,
                 ),
               ],
-              selected: {domain},
-              onSelectionChanged: (selection) =>
+              selected: domain,
+              onChanged: (value) =>
                   ref.read(selectedReportDomainProvider.notifier).state =
-                      selection.first,
+                      value,
             ),
           ),
           Padding(
@@ -161,23 +165,26 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
               AppSpacing.lg,
               0,
               AppSpacing.lg,
-              AppSpacing.md,
+              AppSpacing.sm,
             ),
-            child: SegmentedButton<ReportView>(
+            child: AppTabToggle<ReportView>(
               segments: [
-                const ButtonSegment(
+                const AppToggleSegment(
                   value: ReportView.byPeriod,
-                  label: Text('By period'),
+                  label: 'By period',
+                  icon: Icons.calendar_view_month_rounded,
                 ),
-                ButtonSegment(
+                AppToggleSegment(
                   value: ReportView.byGroup,
-                  label: Text(isInvoices ? 'By supplier' : 'By counterparty'),
+                  label: isInvoices ? 'By supplier' : 'By counterparty',
+                  icon: isInvoices
+                      ? Icons.storefront_rounded
+                      : Icons.person_rounded,
                 ),
               ],
-              selected: {view},
-              onSelectionChanged: (selection) =>
-                  ref.read(selectedReportViewProvider.notifier).state =
-                      selection.first,
+              selected: view,
+              onChanged: (value) =>
+                  ref.read(selectedReportViewProvider.notifier).state = value,
             ),
           ),
           Padding(
@@ -271,13 +278,17 @@ class _ByPeriodView extends ConsumerWidget {
             separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
             itemBuilder: (context, index) {
               if (index == 0) {
-                return _SummaryCard(
+                return _SummaryTiles(
+                  countIcon: Icons.receipt_long_rounded,
                   countLabel:
                       '${summaries.fold<int>(0, (a, s) => a + s.invoiceCount)}',
+                  countSuffix: 'invoices',
+                  stat1Icon: Icons.shopping_bag_outlined,
                   stat1Label: 'Purchases',
                   stat1Value: _currencyFormat.format(
                     summaries.fold<double>(0, (a, s) => a + s.purchasesTotal),
                   ),
+                  stat2Icon: Icons.percent_rounded,
                   stat2Label: 'Tax',
                   stat2Value: _currencyFormat.format(
                     summaries.fold<double>(0, (a, s) => a + s.taxTotal),
@@ -332,13 +343,16 @@ class _BySupplierView extends ConsumerWidget {
             separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
             itemBuilder: (context, index) {
               if (index == 0) {
-                return _SummaryCard(
+                return _SummaryTiles(
+                  countIcon: Icons.storefront_rounded,
                   countLabel: '${summaries.length}',
                   countSuffix: 'suppliers',
+                  stat1Icon: Icons.shopping_bag_outlined,
                   stat1Label: 'Purchases',
                   stat1Value: _currencyFormat.format(
                     summaries.fold<double>(0, (a, s) => a + s.purchasesTotal),
                   ),
+                  stat2Icon: Icons.percent_rounded,
                   stat2Label: 'Tax',
                   stat2Value: _currencyFormat.format(
                     summaries.fold<double>(0, (a, s) => a + s.taxTotal),
@@ -396,14 +410,17 @@ class _TransactionsByPeriodView extends ConsumerWidget {
             separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
             itemBuilder: (context, index) {
               if (index == 0) {
-                return _SummaryCard(
+                return _SummaryTiles(
+                  countIcon: Icons.account_balance_wallet_rounded,
                   countLabel:
                       '${summaries.fold<int>(0, (a, s) => a + s.transactionCount)}',
                   countSuffix: 'transactions',
+                  stat1Icon: Icons.arrow_downward_rounded,
                   stat1Label: 'Received',
                   stat1Value: _currencyFormat.format(
                     summaries.fold<double>(0, (a, s) => a + s.creditTotal),
                   ),
+                  stat2Icon: Icons.arrow_upward_rounded,
                   stat2Label: 'Sent',
                   stat2Value: _currencyFormat.format(
                     summaries.fold<double>(0, (a, s) => a + s.debitTotal),
@@ -460,13 +477,16 @@ class _ByCounterpartyView extends ConsumerWidget {
             separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
             itemBuilder: (context, index) {
               if (index == 0) {
-                return _SummaryCard(
+                return _SummaryTiles(
+                  countIcon: Icons.people_alt_rounded,
                   countLabel: '${summaries.length}',
                   countSuffix: 'counterparties',
+                  stat1Icon: Icons.arrow_downward_rounded,
                   stat1Label: 'Received',
                   stat1Value: _currencyFormat.format(
                     summaries.fold<double>(0, (a, s) => a + s.creditTotal),
                   ),
+                  stat2Icon: Icons.arrow_upward_rounded,
                   stat2Label: 'Sent',
                   stat2Value: _currencyFormat.format(
                     summaries.fold<double>(0, (a, s) => a + s.debitTotal),
@@ -524,99 +544,131 @@ class _NoSearchResults extends StatelessWidget {
   }
 }
 
-/// One neutral card holding the whole view's totals — three columns, not
-/// three separate colored tiles. A single quiet summary, not a wall of
-/// color competing with the list below it. Generic over its two secondary
-/// stats so both invoice totals (purchases/tax) and transaction totals
-/// (received/sent) reuse the same card.
-class _SummaryCard extends StatelessWidget {
-  const _SummaryCard({
+/// Three colorful gradient tiles instead of one plain white card — the same
+/// visual language as the Dashboard's insight tiles, so Reports reads as
+/// part of the same considered product instead of a bare data table.
+/// Generic over its icons/labels so both invoice totals (purchases/tax) and
+/// transaction totals (received/sent) reuse the same tiles.
+class _SummaryTiles extends StatelessWidget {
+  const _SummaryTiles({
+    required this.countIcon,
     required this.countLabel,
+    required this.countSuffix,
+    required this.stat1Icon,
     required this.stat1Label,
     required this.stat1Value,
+    required this.stat2Icon,
     required this.stat2Label,
     required this.stat2Value,
-    this.countSuffix = 'invoices',
   });
 
+  final IconData countIcon;
   final String countLabel;
   final String countSuffix;
+  final IconData stat1Icon;
   final String stat1Label;
   final String stat1Value;
+  final IconData stat2Icon;
   final String stat2Label;
   final String stat2Value;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.md),
-      child: AppCard(
-        padding: const EdgeInsets.symmetric(
-          vertical: AppSpacing.lg,
-          horizontal: AppSpacing.md,
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: _SummaryStat(label: countSuffix, value: countLabel),
+      child: Row(
+        children: [
+          Expanded(
+            child: _StatTile(
+              icon: countIcon,
+              value: countLabel,
+              label: countSuffix,
+              gradient: AppGradients.blue,
             ),
-            _VerticalDivider(theme: theme),
-            Expanded(
-              child: _SummaryStat(label: stat1Label, value: stat1Value),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: _StatTile(
+              icon: stat1Icon,
+              value: stat1Value,
+              label: stat1Label,
+              gradient: AppGradients.green,
             ),
-            _VerticalDivider(theme: theme),
-            Expanded(
-              child: _SummaryStat(
-                label: stat2Label,
-                value: stat2Value,
-                color: theme.colorScheme.primary,
-              ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: _StatTile(
+              icon: stat2Icon,
+              value: stat2Value,
+              label: stat2Label,
+              gradient: AppGradients.coral,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 }
 
-class _VerticalDivider extends StatelessWidget {
-  const _VerticalDivider({required this.theme});
+class _StatTile extends StatelessWidget {
+  const _StatTile({
+    required this.icon,
+    required this.value,
+    required this.label,
+    required this.gradient,
+  });
 
-  final ThemeData theme;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(width: 1, height: 32, color: theme.colorScheme.outline);
-  }
-}
-
-class _SummaryStat extends StatelessWidget {
-  const _SummaryStat({required this.label, required this.value, this.color});
-
-  final String label;
+  final IconData icon;
   final String value;
-  final Color? color;
+  final String label;
+  final LinearGradient gradient;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Column(
-      children: [
-        Text(
-          value,
-          style: theme.textTheme.titleMedium?.copyWith(color: color),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        const SizedBox(height: 2),
-        Text(
-          label,
-          style: theme.textTheme.labelSmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        vertical: AppSpacing.md,
+        horizontal: AppSpacing.sm,
+      ),
+      decoration: BoxDecoration(
+        gradient: gradient,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: gradient.colors.first.withValues(alpha: 0.3),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+            spreadRadius: -6,
           ),
-        ),
-      ],
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: Colors.white, size: 18),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            value,
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: Colors.white.withValues(alpha: 0.85),
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
     );
   }
 }

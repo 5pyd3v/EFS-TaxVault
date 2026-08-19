@@ -21,17 +21,15 @@ import {
 import {
   BANK_TRANSACTION_EXTRACTION_PROMPT,
   BANK_TRANSACTION_EXTRACTION_PROMPT_VERSION,
-} from '../_shared/prompts/bank_transaction_extraction_v3.ts';
+} from '../_shared/prompts/bank_transaction_extraction_v5.ts';
 import { handleGeminiKeyError, resolveGeminiApiKey } from '../_shared/gemini_key.ts';
-import { fetchGeminiWithRetry } from '../_shared/gemini_fetch.ts';
+import { callGeminiApi, startGeminiDeadline } from '../_shared/gemini_fetch.ts';
 
-// See extract-invoice/index.ts for why this alias needs a pinned fallback:
-// right after Google ships a new model generation, "-latest" can point at
-// a freshly-launched, under-provisioned model returning sustained 503s.
-const GEMINI_MODEL = 'gemini-flash-latest';
-// Supported until 2026-10-16; replace with the current stable (non-preview)
-// flash model if it starts failing too.
-const GEMINI_FALLBACK_MODEL = 'gemini-2.5-flash';
+// See extract-invoice/index.ts for the benchmark this came from.
+const GEMINI_MODEL = 'gemini-3.1-flash-lite';
+const GEMINI_MODEL_SENDS_THINKING_CONFIG = false;
+const GEMINI_FALLBACK_MODEL = 'gemini-flash-latest';
+const GEMINI_FALLBACK_SENDS_THINKING_CONFIG = true;
 const DOCUMENT_BUCKET = 'documents';
 
 interface ExtractBankTransactionRequest {
@@ -44,6 +42,23 @@ function sanitizeText(value: string | undefined | null, maxLength = 120): string
   const trimmed = value.trim();
   if (!trimmed) return null;
   return trimmed.length > maxLength ? trimmed.slice(0, maxLength) : trimmed;
+}
+
+/** Gemini's transactionDate occasionally comes back with extra text run on
+ * after the actual date/time — e.g. "2026-08-17T12:07:00Resulting JSO..."
+ * — the same run-on-line failure mode that motivated the counterparty-name
+ * fallback below, just landing in a different field. Plain truncation
+ * (sanitizeText) doesn't fix this: a truncated garbage string still isn't
+ * a valid timestamp and fails the Postgres insert outright, taking the
+ * whole scan down with it. This keeps only a leading ISO 8601 date/time
+ * and drops anything that doesn't parse — transaction_date is nullable,
+ * and a missing date is a quick fix in Review; a failed insert isn't. */
+function parseValidTransactionDate(value: string | null): string | null {
+  if (!value) return null;
+  const match = value.match(/^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?/);
+  if (!match) return null;
+  const candidate = match[0].replace(' ', 'T');
+  return Number.isNaN(Date.parse(candidate)) ? null : candidate;
 }
 
 Deno.serve(async (req) => {
@@ -77,7 +92,7 @@ Deno.serve(async (req) => {
 
   const { data: document, error: documentError } = await callerClient
     .from('documents')
-    .select('id, organization_id, uploaded_by, storage_path, page_count, document_hash')
+    .select('id, organization_id, uploaded_by, storage_path, page_count, document_hash, ocr_text')
     .eq('id', body.document_id)
     .single();
 
@@ -110,8 +125,18 @@ Deno.serve(async (req) => {
       return geminiApiKey;
     }
 
-    const imageParts = await downloadPageImages(serviceClient, document.storage_path, document.page_count);
-    const { data: extraction, model: modelUsed } = await callGemini(geminiApiKey, imageParts);
+    // Prefer the on-device OCR text: it's roughly 10x cheaper in tokens
+    // than the page image and uses Gemini's much faster text path. Only
+    // download and send images when OCR produced nothing usable.
+    const ocrText = typeof document.ocr_text === 'string' ? document.ocr_text.trim() : '';
+    const promptParts = ocrText.length >= 40
+      ? []
+      : await downloadPageImages(serviceClient, document.storage_path, document.page_count);
+    const { data: extraction, model: modelUsed } = await callGemini(
+      geminiApiKey,
+      promptParts,
+      ocrText.length >= 40 ? ocrText : null,
+    );
 
     if (!extraction.isBankTransaction) {
       await failJob(serviceClient, jobId, 'The scanned image does not appear to be a transaction receipt.');
@@ -122,7 +147,9 @@ Deno.serve(async (req) => {
     }
 
     const referenceNumber = sanitizeText(extraction.referenceNumber, 80);
-    const transactionDate = sanitizeText(extraction.transactionDate, 32);
+    const transactionDate = parseValidTransactionDate(
+      sanitizeText(extraction.transactionDate, 64),
+    );
     const amount = round2(extraction.amount ?? 0);
     const counterpartyName =
       sanitizeText(extraction.counterpartyName, 200) ??
@@ -177,29 +204,32 @@ Deno.serve(async (req) => {
       throw new Error(transactionError?.message ?? 'Failed to create transaction.');
     }
 
-    await serviceClient.from('ai_extractions').insert({
-      organization_id: document.organization_id,
-      job_id: jobId,
-      invoice_id: null,
-      model: modelUsed,
-      prompt_version: BANK_TRANSACTION_EXTRACTION_PROMPT_VERSION,
-      schema_version: EXTRACTION_SCHEMA_VERSION,
-      raw_response: extraction,
-      normalized_json: { amount, transactionDate, referenceNumber },
-      confidence: extraction.confidence ?? {},
-      processing_status: 'completed',
-    });
-
-    await serviceClient
-      .from('ai_processing_jobs')
-      .update({ status: 'completed', completed_at: new Date().toISOString() })
-      .eq('id', jobId);
+    // Independent writes — the extraction audit row and the job status
+    // don't depend on each other, so they go out together rather than
+    // costing two sequential round trips on every successful scan.
+    await Promise.all([
+      serviceClient.from('ai_extractions').insert({
+        organization_id: document.organization_id,
+        job_id: jobId,
+        invoice_id: null,
+        model: modelUsed,
+        prompt_version: BANK_TRANSACTION_EXTRACTION_PROMPT_VERSION,
+        schema_version: EXTRACTION_SCHEMA_VERSION,
+        raw_response: extraction,
+        normalized_json: { amount, transactionDate, referenceNumber },
+        confidence: extraction.confidence ?? {},
+        processing_status: 'completed',
+      }),
+      serviceClient
+        .from('ai_processing_jobs')
+        .update({ status: 'completed', completed_at: new Date().toISOString() })
+        .eq('id', jobId),
+    ]);
 
     return jsonResponse({ transaction_id: transaction.id });
   } catch (error) {
     console.error('extract-bank-transaction failed', error);
-    const status = (error as { status?: number } | null)?.status;
-    const keyErrorResponse = await handleGeminiKeyError(serviceClient, jobId, document.organization_id, status);
+    const keyErrorResponse = await handleGeminiKeyError(serviceClient, jobId, document.organization_id, error);
     if (keyErrorResponse) return keyErrorResponse;
     await failJob(serviceClient, jobId, error instanceof Error ? error.message : 'Unknown error');
     return jsonResponse({ error: 'Could not process this document. Please try again.' }, 500);
@@ -247,14 +277,26 @@ async function downloadPageImages(
 async function callGemini(
   apiKey: string,
   images: { mimeType: string; data: string }[],
+  ocrText: string | null,
 ): Promise<{ data: BankTransactionExtractionResult; model: string }> {
+  // One shared deadline across primary + fallback, so retrying can never
+  // stack into a multi-minute wait before the user is told it failed.
+  const deadline = startGeminiDeadline();
   try {
-    return { data: await callGeminiModel(GEMINI_MODEL, apiKey, images), model: GEMINI_MODEL };
-  } catch (error) {
-    const status = (error as { status?: number } | null)?.status;
-    if (status !== 503) throw error;
     return {
-      data: await callGeminiModel(GEMINI_FALLBACK_MODEL, apiKey, images),
+      data: await callGeminiModel(
+        GEMINI_MODEL, apiKey, images, ocrText, 1, deadline,
+        GEMINI_MODEL_SENDS_THINKING_CONFIG,
+      ),
+      model: GEMINI_MODEL,
+    };
+  } catch (error) {
+    console.error(`Primary model ${GEMINI_MODEL} failed, trying fallback`, error);
+    return {
+      data: await callGeminiModel(
+        GEMINI_FALLBACK_MODEL, apiKey, images, ocrText, 0, deadline,
+        GEMINI_FALLBACK_SENDS_THINKING_CONFIG,
+      ),
       model: GEMINI_FALLBACK_MODEL,
     };
   }
@@ -264,29 +306,48 @@ async function callGeminiModel(
   model: string,
   apiKey: string,
   images: { mimeType: string; data: string }[],
+  ocrText: string | null,
+  maxRetries: number,
+  deadline: number,
+  sendThinkingConfig: boolean,
 ): Promise<BankTransactionExtractionResult> {
-  const response = await fetchGeminiWithRetry(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              { text: BANK_TRANSACTION_EXTRACTION_PROMPT },
-              ...images.map((img) => ({ inline_data: { mime_type: img.mimeType, data: img.data } })),
-            ],
-          },
-        ],
-        generationConfig: {
-          responseMimeType: 'application/json',
-          responseSchema: bankTransactionExtractionResponseSchema,
-          temperature: 0.2,
-          maxOutputTokens: 4096,
+  // Text path when OCR succeeded, image path otherwise. The prompt is
+  // identical either way — only the evidence it reasons over changes.
+  const parts = ocrText
+    ? [
+        {
+          text:
+            `${BANK_TRANSACTION_EXTRACTION_PROMPT}\n\n` +
+            `The receipt text below was recognized on-device, top to bottom. ` +
+            `Occasional OCR artifacts (misread characters, split lines) are ` +
+            `expected — interpret them sensibly rather than treating them as ` +
+            `literal.\n\nRECEIPT TEXT:\n${ocrText}`,
         },
-      }),
+      ]
+    : [
+        { text: BANK_TRANSACTION_EXTRACTION_PROMPT },
+        ...images.map((img) => ({ inline_data: { mime_type: img.mimeType, data: img.data } })),
+      ];
+
+  const response = await callGeminiApi(
+    model,
+    apiKey,
+    {
+      contents: [{ parts }],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseSchema: bankTransactionExtractionResponseSchema,
+        temperature: 0.2,
+        // A transaction receipt is a flat handful of fields plus a 2-4
+        // line fullText — 4096 was far more headroom than this shape can
+        // ever need, and an over-generous cap lets a degenerate response
+        // run long before being cut off.
+        maxOutputTokens: 1024,
+      },
     },
+    maxRetries,
+    deadline,
+    sendThinkingConfig,
   );
 
   if (!response.ok) {
@@ -317,15 +378,20 @@ function round2(value: number): number {
 /// despite the prompt's guidance — real-world testing showed this happens
 /// often enough on dense Raast P2P run-on lines to be worth a second pass.
 /// Anchored on the Pakistani IBAN prefix (PK + 2 digits + 4-letter bank
-/// code), which reliably immediately follows the counterparty's name on
-/// these receipts and essentially never appears anywhere else in the
-/// text — a narrow, low-false-positive pattern rather than a general
-/// name parser.
+/// code), which reliably immediately follows a name on these receipts and
+/// essentially never appears anywhere else in the text — a narrow,
+/// low-false-positive pattern rather than a general name parser.
+///
+/// Since v4, counterpartyName is always the sender: this tries a "from X"
+/// match first (the sender, explicitly labeled) and only falls back to
+/// "to X" (implying the account holder is the sender, with no explicit
+/// label) if no "from" pattern is present on the receipt at all.
 function extractCounterpartyNameFallback(fullText: string | undefined | null): string | null {
   if (!fullText) return null;
-  const match = fullText.match(
-    /(?:to|from)\s+([A-Z][A-Za-z.&/-]*(?:\s+[A-Z][A-Za-z.&/-]*){0,5})\s+PK\d{2}[A-Z]{4}/,
-  );
+  const namePattern = '([A-Z][A-Za-z.&/-]*(?:\\s+[A-Z][A-Za-z.&/-]*){0,5})\\s+PK\\d{2}[A-Z]{4}';
+  const match =
+    fullText.match(new RegExp(`from\\s+${namePattern}`, 'i')) ??
+    fullText.match(new RegExp(`to\\s+${namePattern}`, 'i'));
   if (!match) return null;
   const name = match[1].trim();
   return name.length >= 2 && name.length <= 100 ? name : null;

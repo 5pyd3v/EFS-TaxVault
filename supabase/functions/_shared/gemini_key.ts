@@ -65,30 +65,50 @@ export async function resolveGeminiApiKey(
   return keyRow.gemini_api_key;
 }
 
-/** Call from the outer catch block with the HTTP status attached to a
- * thrown Gemini-request error (see callGemini). If the status indicates a
- * quota or auth problem, marks the org's key invalid so the next request
- * short-circuits via resolveGeminiApiKey instead of hitting Gemini again,
- * and returns the Response to send. Returns null for anything else, so the
- * caller falls through to its normal generic-failure handling. */
+/** Gemini's own wording when the credential itself is the problem. Matched
+ * against the response body rather than inferred from the status code:
+ * HTTP 400 from this API overwhelmingly means "bad request" (an
+ * unsupported generationConfig field, an oversized image, a malformed
+ * schema) — all of which are OUR bugs, not the user's key. Blaming the key
+ * for those is actively harmful: it disables a perfectly good key, and
+ * since re-saving the key clears the flag only for the next request to
+ * trip it again, the user gets stuck in a loop that replacing the key
+ * cannot fix. Only mark a key bad on evidence, never on a bare status. */
+const KEY_PROBLEM_PATTERN =
+  /API_KEY_INVALID|API key not valid|API key expired|PERMISSION_DENIED|CONSUMER_INVALID|invalid authentication|unregistered callers/i;
+
+/** Call from the outer catch block with the error thrown by callGemini
+ * (which carries both the HTTP status and a snippet of the response body).
+ * Marks the org's key invalid ONLY when the response actually identifies
+ * the credential as the problem, so the next request can short-circuit
+ * instead of hitting Gemini again. Returns null for everything else — the
+ * caller then falls through to its normal generic-failure handling, which
+ * preserves the underlying error message for diagnosis. */
 export async function handleGeminiKeyError(
   // deno-lint-ignore no-explicit-any
   serviceClient: any,
   jobId: string,
   organizationId: string,
-  status: number | undefined,
+  error: unknown,
 ): Promise<Response | null> {
-  if (status !== 429 && status !== 400 && status !== 403) return null;
+  const status = (error as { status?: number } | null)?.status;
+  const body = error instanceof Error ? error.message : String(error ?? '');
 
-  const code = status === 429 ? 'quota_exceeded' : 'invalid_key';
+  const isQuota = status === 429;
+  const isKeyProblem =
+    (status === 400 || status === 403) && KEY_PROBLEM_PATTERN.test(body);
+
+  if (!isQuota && !isKeyProblem) return null;
+
+  const code = isQuota ? 'quota_exceeded' : 'invalid_key';
   await serviceClient
     .from('organization_ai_keys')
     .update({ is_valid: false, last_error: code })
     .eq('organization_id', organizationId);
   await failJob(serviceClient, jobId, code);
 
-  const message = code === 'quota_exceeded'
+  const message = isQuota
     ? 'Your Gemini API key has run out of quota. Update your key or wait a while and try again.'
     : 'Your Gemini API key appears to be invalid. Please update it in Profile.';
-  return jsonResponse({ error: code, message }, code === 'quota_exceeded' ? 429 : 401);
+  return jsonResponse({ error: code, message }, isQuota ? 429 : 401);
 }

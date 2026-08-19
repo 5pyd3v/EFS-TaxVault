@@ -24,21 +24,32 @@ import {
   INVOICE_EXTRACTION_PROMPT_VERSION,
 } from '../_shared/prompts/invoice_extraction_v2.ts';
 import { handleGeminiKeyError, resolveGeminiApiKey } from '../_shared/gemini_key.ts';
-import { fetchGeminiWithRetry } from '../_shared/gemini_fetch.ts';
+import { callGeminiApi, startGeminiDeadline } from '../_shared/gemini_fetch.ts';
 
-// An alias, not a pinned version — always resolves to Google's current
-// recommended flash model. The tradeoff: right after Google ships a new
-// model generation, this alias can point at a freshly-launched,
-// under-provisioned model that returns sustained 503s for days before
-// Google scales up capacity (a well-documented recurring pattern, not
-// specific to this project). GEMINI_FALLBACK_MODEL below is the mitigation.
-const GEMINI_MODEL = 'gemini-flash-latest';
-// A pinned, established model to fall back to when the alias above is
-// overloaded — older models are typically better provisioned since demand
-// on them has already stabilized. Supported until 2026-10-16; if it starts
-// failing too, replace this with whatever Google's current stable
-// (non-preview) flash model is at that time.
-const GEMINI_FALLBACK_MODEL = 'gemini-2.5-flash';
+// Chosen by benchmarking this project's actual key against every flash /
+// lite model it can reach, using a real OCR-text extraction request
+// (2026-08-18). Latency for identical input varied enormously, and the
+// self-updating aliases were among the WORST:
+//   gemini-3.1-flash-lite     1.1-1.7s   correct        <- chosen
+//   gemini-3.5-flash-lite    19.3s       correct
+//   gemini-flash-lite-latest 23.2s       correct
+//   gemini-flash-latest      27.6s       correct
+//   gemini-3.7-flash         503 overloaded
+//   gemini-2.5-flash(-lite)  404 retired for this key
+// The lite tier is the right fit now that extraction reads OCR text
+// rather than an image: there's no vision work left to justify a heavier
+// model, and it returned identical field values ~19x faster.
+const GEMINI_MODEL = 'gemini-3.1-flash-lite';
+// The 3.x lite models reject `thinkingConfig.thinkingBudget` outright
+// (HTTP 400) and already report thoughtsTokenCount=0 without it, so
+// sending it would only buy a wasted round trip. Older models DO honour
+// it and benefit from it, hence the per-model flag rather than one global
+// setting. callGeminiApi still strips it on any 400 as a safety net.
+const GEMINI_MODEL_SENDS_THINKING_CONFIG = false;
+// Slower but independent of the primary — worth one shot when the primary
+// is overloaded or retired.
+const GEMINI_FALLBACK_MODEL = 'gemini-flash-latest';
+const GEMINI_FALLBACK_SENDS_THINKING_CONFIG = true;
 const CALCULATION_TOLERANCE = 1.0; // PKR — rounding slack before flagging a mismatch
 const DOCUMENT_BUCKET = 'documents';
 
@@ -57,6 +68,18 @@ function sanitizeText(value: string | undefined | null, maxLength = 120): string
   const trimmed = value.trim();
   if (!trimmed) return null;
   return trimmed.length > maxLength ? trimmed.slice(0, maxLength) : trimmed;
+}
+
+/** Same defensive parsing as extract-bank-transaction's
+ * parseValidTransactionDate — Gemini occasionally runs stray text onto a
+ * date field, and invoice_date is a `date` column that rejects anything
+ * that isn't cleanly YYYY-MM-DD. Truncating to 10 chars already discards
+ * most trailing garbage, but this also rejects a garbled leading portion
+ * instead of passing it through and failing the insert. */
+function parseValidInvoiceDate(value: string | null): string | null {
+  if (!value) return null;
+  const match = value.match(/^\d{4}-\d{2}-\d{2}/);
+  return match && !Number.isNaN(Date.parse(match[0])) ? match[0] : null;
 }
 
 interface Warning {
@@ -106,7 +129,7 @@ Deno.serve(async (req) => {
 
   const { data: document, error: documentError } = await callerClient
     .from('documents')
-    .select('id, organization_id, uploaded_by, storage_path, page_count, document_type, document_hash')
+    .select('id, organization_id, uploaded_by, storage_path, page_count, document_type, document_hash, ocr_text')
     .eq('id', body.document_id)
     .single();
 
@@ -139,8 +162,19 @@ Deno.serve(async (req) => {
       return geminiApiKey;
     }
 
-    const imageParts = await downloadPageImages(serviceClient, document.storage_path, document.page_count);
-    const { data: extraction, model: modelUsed } = await callGemini(geminiApiKey, imageParts);
+    // Prefer the on-device OCR text: roughly 10x cheaper in tokens than the
+    // page image and served by Gemini's much faster text path. Only
+    // download and send images when OCR produced nothing usable.
+    const ocrText = typeof document.ocr_text === 'string' ? document.ocr_text.trim() : '';
+    const useOcr = ocrText.length >= 40;
+    const imageParts = useOcr
+      ? []
+      : await downloadPageImages(serviceClient, document.storage_path, document.page_count);
+    const { data: extraction, model: modelUsed } = await callGemini(
+      geminiApiKey,
+      imageParts,
+      useOcr ? ocrText : null,
+    );
 
     if (!extraction.isInvoice) {
       await failJob(serviceClient, jobId, 'The scanned document does not appear to be an invoice or receipt.');
@@ -153,7 +187,9 @@ Deno.serve(async (req) => {
     const warnings: Warning[] = [];
     const totals = normalizeTotals(extraction, warnings);
     const invoiceNumber = sanitizeText(extraction.document?.invoiceNumber);
-    const invoiceDate = sanitizeText(extraction.document?.invoiceDate, 10);
+    const invoiceDate = parseValidInvoiceDate(
+      sanitizeText(extraction.document?.invoiceDate, 24),
+    );
 
     // Duplicate check happens BEFORE creating anything: scanning the same
     // receipt twice must not silently produce two invoices (spec §16 —
@@ -216,20 +252,46 @@ Deno.serve(async (req) => {
     }
 
     if (extraction.items?.length) {
-      const items = extraction.items.map((item, index) => ({
-        invoice_id: invoice.id,
-        line_no: index + 1,
-        description: item.description ?? 'Item',
-        product_code: item.productCode ?? null,
-        quantity: item.quantity ?? 1,
-        unit_of_measure: item.unitOfMeasure ?? null,
-        unit_price: item.unitPrice ?? 0,
-        discount: item.discount ?? 0,
-        taxable_amount: (item.unitPrice ?? 0) * (item.quantity ?? 1) - (item.discount ?? 0),
-        tax_rate: item.taxRate ?? 0,
-        tax_amount: item.taxAmount ?? 0,
-        total_amount: item.totalAmount ?? 0,
-      }));
+      const items = extraction.items.map((item, index) => {
+        // Line arithmetic is DERIVED here, never taken on faith from the
+        // model (same rule the invoice-level totals already follow: Gemini
+        // reads the document, it doesn't get the final word on maths).
+        // Previously these fell back to a bare `?? 0`, so whenever the
+        // model omitted a per-line total — which it often does when the
+        // printed invoice only shows a line price and a single tax figure
+        // at the bottom — the row silently stored 0.00 and the UI showed
+        // "Rs 0" next to a correctly-priced item.
+        const quantity = item.quantity ?? 1;
+        const unitPrice = item.unitPrice ?? 0;
+        const discount = item.discount ?? 0;
+        const taxRate = item.taxRate ?? 0;
+        const taxableAmount = round2(unitPrice * quantity - discount);
+        // Prefer a printed per-line tax figure; otherwise derive it from
+        // the rate when one was given. Percentages are plain numbers here
+        // (17 means 17%), matching the extraction schema.
+        const taxAmount = round2(item.taxAmount ?? (taxableAmount * taxRate) / 100);
+        // A model-supplied total is only trusted when it's actually
+        // present and non-zero; anything else is computed.
+        const reportedTotal = round2(item.totalAmount ?? 0);
+        const totalAmount = reportedTotal > 0
+          ? reportedTotal
+          : round2(taxableAmount + taxAmount);
+
+        return {
+          invoice_id: invoice.id,
+          line_no: index + 1,
+          description: item.description ?? 'Item',
+          product_code: item.productCode ?? null,
+          quantity,
+          unit_of_measure: item.unitOfMeasure ?? null,
+          unit_price: unitPrice,
+          discount,
+          taxable_amount: taxableAmount,
+          tax_rate: taxRate,
+          tax_amount: taxAmount,
+          total_amount: totalAmount,
+        };
+      });
       await serviceClient.from('invoice_items').insert(items);
     }
 
@@ -292,8 +354,7 @@ Deno.serve(async (req) => {
     return jsonResponse({ invoice_id: invoice.id, warnings: warnings.length, calculation_mismatch: totals.calculationMismatch });
   } catch (error) {
     console.error('extract-invoice failed', error);
-    const status = (error as { status?: number } | null)?.status;
-    const keyErrorResponse = await handleGeminiKeyError(serviceClient, jobId, document.organization_id, status);
+    const keyErrorResponse = await handleGeminiKeyError(serviceClient, jobId, document.organization_id, error);
     if (keyErrorResponse) return keyErrorResponse;
     await failJob(serviceClient, jobId, error instanceof Error ? error.message : 'Unknown error');
     return jsonResponse({ error: 'Could not process this document. Please try again.' }, 500);
@@ -341,14 +402,29 @@ async function downloadPageImages(
 async function callGemini(
   apiKey: string,
   images: { mimeType: string; data: string }[],
+  ocrText: string | null,
 ): Promise<{ data: InvoiceExtractionResult; model: string }> {
+  // One shared deadline across primary + fallback, so retrying can never
+  // stack into a multi-minute wait before the user is told it failed.
+  const deadline = startGeminiDeadline();
   try {
-    return { data: await callGeminiModel(GEMINI_MODEL, apiKey, images), model: GEMINI_MODEL };
-  } catch (error) {
-    const status = (error as { status?: number } | null)?.status;
-    if (status !== 503) throw error;
     return {
-      data: await callGeminiModel(GEMINI_FALLBACK_MODEL, apiKey, images),
+      data: await callGeminiModel(
+        GEMINI_MODEL, apiKey, images, ocrText, 1, deadline,
+        GEMINI_MODEL_SENDS_THINKING_CONFIG,
+      ),
+      model: GEMINI_MODEL,
+    };
+  } catch (error) {
+    // Any failure on the pinned model — overloaded, retired, region-
+    // restricted, whatever — is worth one attempt on the fallback alias
+    // before giving up, as long as budget remains.
+    console.error(`Primary model ${GEMINI_MODEL} failed, trying fallback`, error);
+    return {
+      data: await callGeminiModel(
+        GEMINI_FALLBACK_MODEL, apiKey, images, ocrText, 0, deadline,
+        GEMINI_FALLBACK_SENDS_THINKING_CONFIG,
+      ),
       model: GEMINI_FALLBACK_MODEL,
     };
   }
@@ -358,35 +434,52 @@ async function callGeminiModel(
   model: string,
   apiKey: string,
   images: { mimeType: string; data: string }[],
+  ocrText: string | null,
+  maxRetries: number,
+  deadline: number,
+  sendThinkingConfig: boolean,
 ): Promise<InvoiceExtractionResult> {
-  const response = await fetchGeminiWithRetry(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              { text: INVOICE_EXTRACTION_PROMPT },
-              ...images.map((img) => ({ inline_data: { mime_type: img.mimeType, data: img.data } })),
-            ],
-          },
-        ],
-        generationConfig: {
-          responseMimeType: 'application/json',
-          responseSchema: invoiceExtractionResponseSchema,
-          // Low but non-zero: fully deterministic (0) sometimes makes
-          // vision models more prone to confidently skipping a field it
-          // isn't sure about rather than reporting a best-effort read.
-          temperature: 0.2,
-          // Generous headroom so a long multi-item invoice's JSON never
-          // gets cut off mid-field, which would otherwise look identical
-          // to a genuinely missing invoice number/date/tax value.
-          maxOutputTokens: 8192,
+  // Text path when OCR succeeded, image path otherwise. The prompt is
+  // identical either way — only the evidence it reasons over changes.
+  const parts = ocrText
+    ? [
+        {
+          text:
+            `${INVOICE_EXTRACTION_PROMPT}\n\n` +
+            `The invoice text below was recognized on-device, top to bottom. ` +
+            `Occasional OCR artifacts (misread characters, split lines, ` +
+            `column text flattened into separate lines) are expected — ` +
+            `interpret them sensibly rather than treating them as literal.\n\n` +
+            `INVOICE TEXT:\n${ocrText}`,
         },
-      }),
+      ]
+    : [
+        { text: INVOICE_EXTRACTION_PROMPT },
+        ...images.map((img) => ({ inline_data: { mime_type: img.mimeType, data: img.data } })),
+      ];
+
+  const response = await callGeminiApi(
+    model,
+    apiKey,
+    {
+      contents: [{ parts }],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseSchema: invoiceExtractionResponseSchema,
+        // Low but non-zero: fully deterministic (0) sometimes makes
+        // vision models more prone to confidently skipping a field it
+        // isn't sure about rather than reporting a best-effort read.
+        temperature: 0.2,
+        // Headroom for a long multi-item invoice's JSON so it never gets
+        // cut off mid-field (which would look identical to a genuinely
+        // missing value), but not so generous that a degenerate repetition
+        // loop can run for thousands of tokens before being stopped.
+        maxOutputTokens: 3072,
+      },
     },
+    maxRetries,
+    deadline,
+    sendThinkingConfig,
   );
 
   if (!response.ok) {

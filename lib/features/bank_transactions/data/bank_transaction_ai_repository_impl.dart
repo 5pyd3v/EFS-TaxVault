@@ -6,6 +6,10 @@ import 'package:fbr_taxvault/core/errors/result.dart';
 import 'package:fbr_taxvault/features/bank_transactions/domain/bank_transaction_ai_repository.dart';
 import 'package:fbr_taxvault/features/bank_transactions/domain/bank_transaction_extraction_outcome.dart';
 
+/// See ai_processing_repository_impl.dart for the reasoning — this mirrors
+/// its client-side timeout ceiling.
+const _extractionTimeout = Duration(seconds: 200);
+
 class BankTransactionAiRepositoryImpl implements BankTransactionAiRepository {
   BankTransactionAiRepositoryImpl(this._client);
 
@@ -20,6 +24,7 @@ class BankTransactionAiRepositoryImpl implements BankTransactionAiRepository {
       final response = await _client.functions.invoke(
         'extract-bank-transaction',
         body: {'document_id': documentId, 'force': force},
+        abortSignal: Future.delayed(_extractionTimeout),
       );
       final data = response.data;
       if (data is Map && data['duplicate'] == true) {
@@ -53,6 +58,12 @@ class BankTransactionAiRepositoryImpl implements BankTransactionAiRepository {
       }
       final message = code ?? 'Could not analyze this document. Please try again.';
       return Result.err(ServerFailure(message));
+    } on RequestAbortedException {
+      return const Result.err(
+        ServerFailure(
+          'Analysis is taking longer than expected. Please try again.',
+        ),
+      );
     } on SocketException {
       return const Result.err(NetworkFailure());
     } catch (_) {

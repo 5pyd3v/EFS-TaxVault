@@ -17,6 +17,7 @@ class BankTransactionDetail {
     required this.aiConfidence,
     this.documentStoragePath,
     this.documentPageCount = 0,
+    this.rejectionReason,
   });
 
   final String id;
@@ -37,6 +38,10 @@ class BankTransactionDetail {
   /// delete set null`) — in that case there's no original scan left to view.
   final String? documentStoragePath;
   final int documentPageCount;
+
+  /// Set only when [verificationStatus] is `rejected` and the approver gave
+  /// a reason.
+  final String? rejectionReason;
 
   bool get hasScannedDocument =>
       documentStoragePath != null &&
@@ -65,6 +70,7 @@ class BankTransactionDetail {
           (map['ai_confidence'] as Map?)?.cast<String, dynamic>() ?? const {},
       documentStoragePath: document?['storage_path'] as String?,
       documentPageCount: (document?['page_count'] as num?)?.toInt() ?? 0,
+      rejectionReason: map['rejection_reason'] as String?,
     );
   }
 }

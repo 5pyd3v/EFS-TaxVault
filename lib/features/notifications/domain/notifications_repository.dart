@@ -6,4 +6,5 @@ abstract interface class NotificationsRepository {
   Future<Result<int>> unreadCount();
   Future<Result<void>> markRead(String notificationId);
   Future<Result<void>> markAllRead();
+  Future<Result<void>> delete(String notificationId);
 }

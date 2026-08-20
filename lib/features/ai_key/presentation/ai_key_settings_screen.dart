@@ -63,9 +63,7 @@ class _AiKeySettingsScreenState extends ConsumerState<AiKeySettingsScreen> {
     Clipboard.setData(const ClipboardData(text: _geminiStudioUrl));
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(
-        const SnackBar(content: Text('Link copied to clipboard')),
-      );
+      ..showSnackBar(const SnackBar(content: Text('Link copied to clipboard')));
   }
 
   @override
@@ -121,8 +119,7 @@ class _AiKeySettingsScreenState extends ConsumerState<AiKeySettingsScreen> {
                                 ? Icons.visibility_outlined
                                 : Icons.visibility_off_outlined,
                           ),
-                          onPressed: () =>
-                              setState(() => _obscure = !_obscure),
+                          onPressed: () => setState(() => _obscure = !_obscure),
                         ),
                       ),
                       validator: (value) {
@@ -208,9 +205,7 @@ class _StatusCardSkeleton extends StatelessWidget {
       padding: const EdgeInsets.all(AppSpacing.lg),
       child: const SizedBox(
         height: 40,
-        child: Center(
-          child: CircularProgressIndicator(strokeWidth: 2),
-        ),
+        child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
       ),
     );
   }

@@ -1,9 +1,10 @@
-// Per-organization Gemini API key lookup + error classification, shared by
-// extract-invoice and extract-bank-transaction. Every org must configure
-// its own key (Profile -> AI Key Settings) — there is deliberately no
-// fallback to a shared secret, so a missing/exhausted key blocks that
-// org's scanning until they add or replace one, rather than silently
-// borrowing another org's quota.
+// Gemini API key lookup + error classification, shared by extract-invoice
+// and extract-bank-transaction. Two-tier: a business-org member may set
+// their own key (user_ai_keys); if they haven't, the org's shared key
+// (organization_ai_keys) is used instead. There is deliberately no
+// fallback beyond that to some shared platform secret, so a missing/
+// exhausted key blocks scanning for that user/org until someone adds or
+// replaces one, rather than silently borrowing another org's quota.
 
 import { corsHeaders } from './cors.ts';
 
@@ -28,28 +29,61 @@ async function failJob(serviceClient: any, jobId: string, message: string) {
     .eq('id', jobId);
 }
 
-/** Looks up the calling org's Gemini key. Returns the key string to proceed
- * with, or a fully-formed Response (job already marked failed) when there
- * is no key configured or the stored key is already known to be bad from a
- * previous run — callers should `return` that Response directly. */
+/** Looks up the key to use for this document: the uploader's own key
+ * (user_ai_keys) if they've set one, otherwise the org's shared key
+ * (organization_ai_keys). Returns the key + which table it came from (so
+ * a later failure can flag the right row), or a fully-formed Response
+ * (job already marked failed) when neither is configured or usable —
+ * callers should `return` that Response directly.
+ *
+ * The user-key lookup is wrapped in try/catch and silently falls back to
+ * the org key on ANY error, including "table doesn't exist" — this is
+ * deliberate defense-in-depth so that deploying this function ahead of
+ * its migration (user_ai_keys) can never take down scanning app-wide,
+ * for individual and business orgs alike. `uploaderUserId` is optional so
+ * existing callers keep compiling even before they're updated to pass it. */
 export async function resolveGeminiApiKey(
   // deno-lint-ignore no-explicit-any
   serviceClient: any,
   jobId: string,
   organizationId: string,
-): Promise<string | Response> {
-  const { data: keyRow } = await serviceClient
-    .from('organization_ai_keys')
-    .select('gemini_api_key, is_valid, last_error')
-    .eq('organization_id', organizationId)
-    .maybeSingle<KeyRow>();
+  uploaderUserId?: string,
+): Promise<{ apiKey: string; keySource: 'user' | 'org' } | Response> {
+  let keyRow: KeyRow | null = null;
+  let keySource: 'user' | 'org' = 'org';
+
+  if (uploaderUserId) {
+    try {
+      const { data } = await serviceClient
+        .from('user_ai_keys')
+        .select('gemini_api_key, is_valid, last_error')
+        .eq('user_id', uploaderUserId)
+        .maybeSingle<KeyRow>();
+      if (data?.gemini_api_key) {
+        keyRow = data;
+        keySource = 'user';
+      }
+    } catch (err) {
+      console.error('user_ai_keys lookup failed, falling back to org key', err);
+    }
+  }
+
+  if (!keyRow) {
+    const { data } = await serviceClient
+      .from('organization_ai_keys')
+      .select('gemini_api_key, is_valid, last_error')
+      .eq('organization_id', organizationId)
+      .maybeSingle<KeyRow>();
+    keyRow = data ?? null;
+    keySource = 'org';
+  }
 
   if (!keyRow?.gemini_api_key) {
     await failJob(serviceClient, jobId, 'no_api_key');
-    return jsonResponse(
-      { error: 'no_api_key', message: 'Add your Gemini API key in Profile to start scanning.' },
-      422,
-    );
+    const message = keySource === 'user'
+      ? 'Add your Gemini API key in Profile to start scanning.'
+      : 'Add your organization’s Gemini API key in Profile to start scanning.';
+    return jsonResponse({ error: 'no_api_key', message }, 422);
   }
 
   if (keyRow.is_valid === false) {
@@ -62,7 +96,7 @@ export async function resolveGeminiApiKey(
     return jsonResponse({ error: code, message }, quota ? 429 : 401);
   }
 
-  return keyRow.gemini_api_key;
+  return { apiKey: keyRow.gemini_api_key, keySource };
 }
 
 /** Gemini's own wording when the credential itself is the problem. Matched
@@ -89,6 +123,8 @@ export async function handleGeminiKeyError(
   serviceClient: any,
   jobId: string,
   organizationId: string,
+  uploaderUserId: string | undefined,
+  keySource: 'user' | 'org',
   error: unknown,
 ): Promise<Response | null> {
   const status = (error as { status?: number } | null)?.status;
@@ -101,10 +137,17 @@ export async function handleGeminiKeyError(
   if (!isQuota && !isKeyProblem) return null;
 
   const code = isQuota ? 'quota_exceeded' : 'invalid_key';
-  await serviceClient
-    .from('organization_ai_keys')
-    .update({ is_valid: false, last_error: code })
-    .eq('organization_id', organizationId);
+  if (keySource === 'user' && uploaderUserId) {
+    await serviceClient
+      .from('user_ai_keys')
+      .update({ is_valid: false, last_error: code })
+      .eq('user_id', uploaderUserId);
+  } else {
+    await serviceClient
+      .from('organization_ai_keys')
+      .update({ is_valid: false, last_error: code })
+      .eq('organization_id', organizationId);
+  }
   await failJob(serviceClient, jobId, code);
 
   const message = isQuota

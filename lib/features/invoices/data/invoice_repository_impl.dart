@@ -57,7 +57,7 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
   }
 
   @override
-  Future<Result<void>> confirmVerification({
+  Future<Result<void>> saveDraftEdits({
     required String invoiceId,
     required String invoiceNumber,
     required String invoiceDate,
@@ -73,6 +73,9 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
       final calculationMismatch =
           (expectedTotal - totalAmount).abs() > _calculationTolerance;
 
+      // Deliberately omits verification_status/verified_by/verified_at —
+      // every scan is usable immediately on creation, and only an
+      // approver's rejectVerification call moves it away from that.
       await _client
           .from('invoices')
           .update({
@@ -85,12 +88,32 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
             'other_taxes': _round2(otherTaxes),
             'total_amount': _round2(totalAmount),
             'calculation_mismatch': calculationMismatch,
-            'verification_status': 'verified',
-            'verified_by': _client.auth.currentUser!.id,
-            'verified_at': DateTime.now().toIso8601String(),
           })
           .eq('id', invoiceId);
 
+      return const Result.ok(null);
+    } on SocketException {
+      return const Result.err(NetworkFailure());
+    } on PostgrestException catch (e) {
+      return Result.err(ServerFailure(e.message));
+    } catch (_) {
+      return const Result.err(UnknownFailure());
+    }
+  }
+
+  @override
+  Future<Result<void>> rejectVerification({
+    required String invoiceId,
+    String? reason,
+  }) async {
+    try {
+      await _client
+          .from('invoices')
+          .update({
+            'verification_status': 'rejected',
+            'rejection_reason': reason?.trim().isEmpty ?? true ? null : reason!.trim(),
+          })
+          .eq('id', invoiceId);
       return const Result.ok(null);
     } on SocketException {
       return const Result.err(NetworkFailure());

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:fbr_taxvault/core/constants/app_constants.dart';
@@ -7,6 +8,9 @@ import 'package:fbr_taxvault/core/theme/app_spacing.dart';
 import 'package:fbr_taxvault/core/theme/app_theme.dart';
 import 'package:fbr_taxvault/features/auth/presentation/auth_controller.dart';
 import 'package:fbr_taxvault/shared/utils/validators.dart';
+import 'package:fbr_taxvault/shared/widgets/app_segmented_toggle.dart';
+
+enum _SignInMode { email, pin }
 
 class SignInScreen extends ConsumerStatefulWidget {
   const SignInScreen({super.key});
@@ -19,23 +23,37 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _pinController = TextEditingController();
   bool _obscurePassword = true;
+  _SignInMode _mode = _SignInMode.email;
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _phoneController.dispose();
+    _pinController.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    await ref
-        .read(authControllerProvider.notifier)
-        .signIn(
-          email: _emailController.text.trim(),
-          password: _passwordController.text,
-        );
+    if (_mode == _SignInMode.email) {
+      await ref
+          .read(authControllerProvider.notifier)
+          .signIn(
+            email: _emailController.text.trim(),
+            password: _passwordController.text,
+          );
+    } else {
+      await ref
+          .read(authControllerProvider.notifier)
+          .signInWithPin(
+            phone: _phoneController.text.trim(),
+            pin: _pinController.text.trim(),
+          );
+    }
   }
 
   @override
@@ -103,35 +121,83 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                   ),
                 ),
                 const SizedBox(height: AppSpacing.xxl),
-                TextFormField(
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  textInputAction: TextInputAction.next,
-                  decoration: const InputDecoration(labelText: 'Email'),
-                  validator: Validators.email,
-                  enabled: !isLoading,
+                AppSegmentedToggle<_SignInMode>(
+                  segments: const [
+                    AppToggleSegment(value: _SignInMode.email, label: 'Email'),
+                    AppToggleSegment(value: _SignInMode.pin, label: 'Team PIN'),
+                  ],
+                  selected: _mode,
+                  onChanged: isLoading
+                      ? (_) {}
+                      : (mode) => setState(() => _mode = mode),
                 ),
-                const SizedBox(height: AppSpacing.lg),
-                TextFormField(
-                  controller: _passwordController,
-                  obscureText: _obscurePassword,
-                  textInputAction: TextInputAction.done,
-                  decoration: InputDecoration(
-                    labelText: 'Password',
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _obscurePassword
-                            ? Icons.visibility_outlined
-                            : Icons.visibility_off_outlined,
+                const SizedBox(height: AppSpacing.xl),
+                if (_mode == _SignInMode.email) ...[
+                  TextFormField(
+                    controller: _emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(labelText: 'Email'),
+                    validator: Validators.email,
+                    enabled: !isLoading,
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  TextFormField(
+                    controller: _passwordController,
+                    obscureText: _obscurePassword,
+                    textInputAction: TextInputAction.done,
+                    decoration: InputDecoration(
+                      labelText: 'Password',
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscurePassword
+                              ? Icons.visibility_outlined
+                              : Icons.visibility_off_outlined,
+                        ),
+                        onPressed: () => setState(
+                          () => _obscurePassword = !_obscurePassword,
+                        ),
                       ),
-                      onPressed: () =>
-                          setState(() => _obscurePassword = !_obscurePassword),
+                    ),
+                    validator: Validators.password,
+                    enabled: !isLoading,
+                    onFieldSubmitted: (_) => _submit(),
+                  ),
+                ] else ...[
+                  Text(
+                    'Sign in with the phone number and PIN your admin gave you',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
-                  validator: Validators.password,
-                  enabled: !isLoading,
-                  onFieldSubmitted: (_) => _submit(),
-                ),
+                  const SizedBox(height: AppSpacing.lg),
+                  TextFormField(
+                    controller: _phoneController,
+                    keyboardType: TextInputType.phone,
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                      labelText: 'Phone number',
+                    ),
+                    validator: Validators.phone,
+                    enabled: !isLoading,
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  TextFormField(
+                    controller: _pinController,
+                    keyboardType: TextInputType.number,
+                    textInputAction: TextInputAction.done,
+                    obscureText: true,
+                    maxLength: 8,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    decoration: const InputDecoration(
+                      labelText: 'PIN',
+                      counterText: '',
+                    ),
+                    validator: Validators.pin,
+                    enabled: !isLoading,
+                    onFieldSubmitted: (_) => _submit(),
+                  ),
+                ],
                 const SizedBox(height: AppSpacing.xxxl),
                 SizedBox(
                   width: double.infinity,
@@ -149,15 +215,17 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                         : const Text('Sign In'),
                   ),
                 ),
-                const SizedBox(height: AppSpacing.xl),
-                Center(
-                  child: TextButton(
-                    onPressed: isLoading
-                        ? null
-                        : () => context.push(AppRoutes.signUp),
-                    child: const Text("Don't have an account? Sign up"),
+                if (_mode == _SignInMode.email) ...[
+                  const SizedBox(height: AppSpacing.xl),
+                  Center(
+                    child: TextButton(
+                      onPressed: isLoading
+                          ? null
+                          : () => context.push(AppRoutes.signUp),
+                      child: const Text("Don't have an account? Sign up"),
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
           ),

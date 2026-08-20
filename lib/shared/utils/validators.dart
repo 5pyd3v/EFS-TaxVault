@@ -22,4 +22,18 @@ abstract final class Validators {
     if ((value ?? '').trim().isEmpty) return message;
     return null;
   }
+
+  static String? phone(String? value) {
+    final digits = (value ?? '').replaceAll(RegExp(r'[^\d]'), '');
+    if (digits.isEmpty) return 'Phone number is required';
+    if (digits.length < 10) return 'Enter a valid phone number';
+    return null;
+  }
+
+  static String? pin(String? value) {
+    final v = value ?? '';
+    if (v.isEmpty) return 'PIN is required';
+    if (!RegExp(r'^\d{4,8}$').hasMatch(v)) return 'Enter your PIN';
+    return null;
+  }
 }

@@ -10,6 +10,7 @@ class InvoiceSummary {
     required this.totalAmount,
     required this.currency,
     required this.verificationStatus,
+    this.createdBy,
   });
 
   final String id;
@@ -19,6 +20,11 @@ class InvoiceSummary {
   final double totalAmount;
   final String currency;
   final String verificationStatus;
+
+  /// Who scanned this invoice — used by the approval queue to show "You"
+  /// vs. a team member's name. Null unless explicitly selected (the plain
+  /// Vault list query doesn't need it).
+  final String? createdBy;
 
   factory InvoiceSummary.fromMap(Map<String, dynamic> map) {
     final supplier = map['suppliers'] as Map<String, dynamic>?;
@@ -32,6 +38,7 @@ class InvoiceSummary {
       currency: map['currency'] as String? ?? 'PKR',
       verificationStatus:
           map['verification_status'] as String? ?? 'needs_review',
+      createdBy: map['created_by'] as String?,
     );
   }
 }

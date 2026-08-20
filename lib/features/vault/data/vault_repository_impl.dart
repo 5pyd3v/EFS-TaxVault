@@ -21,14 +21,19 @@ class VaultRepositoryImpl implements VaultRepository {
     String? searchQuery,
     DateTime? periodStart,
     DateTime? periodEnd,
+    String? verificationStatus,
   }) async {
     try {
       var query = _client
           .from('invoices')
           .select(
-            'id, invoice_number, invoice_date, total_amount, currency, verification_status, suppliers(name)',
+            'id, invoice_number, invoice_date, total_amount, currency, verification_status, created_by, suppliers(name)',
           )
           .eq('organization_id', organizationId);
+
+      if (verificationStatus != null) {
+        query = query.eq('verification_status', verificationStatus);
+      }
 
       if (periodStart != null) {
         query = query.gte('invoice_date', _dateOnly(periodStart));
@@ -66,6 +71,25 @@ class VaultRepositoryImpl implements VaultRepository {
             .map(InvoiceSummary.fromMap)
             .toList(),
       );
+    } on SocketException {
+      return const Result.err(NetworkFailure());
+    } on PostgrestException catch (e) {
+      return Result.err(ServerFailure(e.message));
+    } catch (_) {
+      return const Result.err(UnknownFailure());
+    }
+  }
+
+  @override
+  Future<Result<int>> countDisputed(String organizationId) async {
+    try {
+      final response = await _client
+          .from('invoices')
+          .select('id')
+          .eq('organization_id', organizationId)
+          .eq('verification_status', 'rejected')
+          .count(CountOption.exact);
+      return Result.ok(response.count);
     } on SocketException {
       return const Result.err(NetworkFailure());
     } on PostgrestException catch (e) {

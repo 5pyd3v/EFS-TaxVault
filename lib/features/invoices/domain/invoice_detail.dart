@@ -61,6 +61,7 @@ class InvoiceDetail {
     required this.warnings,
     this.documentStoragePath,
     this.documentPageCount = 0,
+    this.rejectionReason,
   });
 
   final String id;
@@ -84,6 +85,10 @@ class InvoiceDetail {
   /// null`) — in that case there's no original scan left to view.
   final String? documentStoragePath;
   final int documentPageCount;
+
+  /// Set only when [verificationStatus] is `rejected` and the approver gave
+  /// a reason.
+  final String? rejectionReason;
 
   bool get hasScannedDocument =>
       documentStoragePath != null &&
@@ -121,6 +126,7 @@ class InvoiceDetail {
       warnings: warnings.map(AiWarning.fromMap).toList(),
       documentStoragePath: document?['storage_path'] as String?,
       documentPageCount: (document?['page_count'] as num?)?.toInt() ?? 0,
+      rejectionReason: invoice['rejection_reason'] as String?,
     );
   }
 }

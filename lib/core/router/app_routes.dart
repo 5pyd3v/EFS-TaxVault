@@ -15,6 +15,12 @@ abstract final class AppRoutes {
   static const profile = '/profile';
   static const notifications = '/notifications';
   static const aiKeySettings = '/settings/ai-key';
+  static const myAiKeySettings = '/settings/my-ai-key';
+  static const team = '/team';
+  static const addTeamMember = '/team/add';
+  static const disputeQueue = '/disputes';
+  static const superadmin = '/superadmin';
+  static const createSandboxAccount = '/superadmin/create-sandbox';
 
   static const bankTransactionProcessingPattern =
       '/bank-transactions/processing/:documentId';

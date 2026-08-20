@@ -15,11 +15,20 @@ abstract interface class BankTransactionRepository {
     String? searchQuery,
     DateTime? periodStart,
     DateTime? periodEnd,
+    String? verificationStatus,
   });
+
+  /// Org-wide count of disputed transactions — see
+  /// VaultRepository.countDisputed for why this is separate from the list.
+  Future<Result<int>> countDisputed(String organizationId);
 
   Future<Result<BankTransactionDetail>> getDetail(String transactionId);
 
-  Future<Result<void>> confirmVerification({
+  /// Saves the user's corrections. Never touches verification_status —
+  /// every scan is usable immediately on creation (needs_review), and only
+  /// [rejectVerification] (admin/owner, enforced server-side by
+  /// enforce_verification_status_change) moves it away from that.
+  Future<Result<void>> saveDraftEdits({
     required String transactionId,
     required String direction,
     required double amount,
@@ -31,8 +40,18 @@ abstract interface class BankTransactionRepository {
     required String status,
   });
 
-  /// Permanently deletes the transaction and its scanned pages. Used both
-  /// for an explicit user-initiated delete and for discarding a
-  /// transaction the user never confirmed.
+  /// Owner/admin only — disputes the transaction with an optional reason,
+  /// which the submitter sees on their copy (and is notified of, via
+  /// notify_bank_transaction_verification_decision). The submitter (or
+  /// admin) then rescans it — see [deleteTransaction], which a rescan calls
+  /// before capturing a fresh photo.
+  Future<Result<void>> rejectVerification({
+    required String transactionId,
+    String? reason,
+  });
+
+  /// Permanently deletes the transaction, its scanned pages, and everything
+  /// derived from it. Used both for an explicit user-initiated delete and
+  /// as the first step of a rescan.
   Future<Result<void>> deleteTransaction(String transactionId);
 }

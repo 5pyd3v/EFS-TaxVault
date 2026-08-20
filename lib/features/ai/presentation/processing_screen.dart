@@ -6,6 +6,7 @@ import 'package:fbr_taxvault/core/router/app_routes.dart';
 import 'package:fbr_taxvault/core/theme/app_spacing.dart';
 import 'package:fbr_taxvault/features/ai/domain/extraction_outcome.dart';
 import 'package:fbr_taxvault/features/ai/presentation/ai_processing_providers.dart';
+import 'package:fbr_taxvault/features/auth/presentation/auth_providers.dart';
 
 final _currencyFormat = NumberFormat.currency(
   locale: 'en_US',
@@ -63,6 +64,16 @@ class _ProcessingScreenState extends ConsumerState<ProcessingScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final extraction = ref.watch(aiExtractionProvider(widget.documentId));
+    // Duplicate detection is org-wide (you don't want the same receipt
+    // entered twice no matter who scans it), but with org-scoped
+    // visibility a non-approver may not have permission to SELECT the
+    // matched row if someone else created it — "View existing invoice"
+    // would send them to a review screen that can't load, leaving them
+    // stuck with no way forward except re-scanning into the same wall.
+    // Only an approver (who can see every row in the org) gets that
+    // button; everyone else sees the same duplicate info inline and can
+    // still choose "Save anyway".
+    final isApprover = ref.watch(isApproverProvider);
 
     ref.listen(aiExtractionProvider(widget.documentId), (previous, next) {
       final outcome = next.valueOrNull;
@@ -88,9 +99,11 @@ class _ProcessingScreenState extends ConsumerState<ProcessingScreen> {
                   outcome: outcome,
                   isSaving: _isSavingAnyway,
                   error: _saveAnywayError,
-                  onViewExisting: () => context.pushReplacement(
-                    AppRoutes.invoiceReview(outcome.existingInvoiceId),
-                  ),
+                  onViewExisting: isApprover
+                      ? () => context.pushReplacement(
+                          AppRoutes.invoiceReview(outcome.existingInvoiceId),
+                        )
+                      : null,
                   onSaveAnyway: _saveAnyway,
                 ),
                 ExtractionKeyError() => _KeyErrorPrompt(outcome: outcome),
@@ -167,11 +180,7 @@ class _KeyErrorPrompt extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(
-          Icons.key_off_outlined,
-          size: 40,
-          color: theme.colorScheme.error,
-        ),
+        Icon(Icons.key_off_outlined, size: 40, color: theme.colorScheme.error),
         const SizedBox(height: AppSpacing.xl),
         Text('API key needs attention', style: theme.textTheme.titleMedium),
         const SizedBox(height: AppSpacing.sm),
@@ -212,7 +221,12 @@ class _DuplicatePrompt extends StatelessWidget {
   final ExtractionDuplicate outcome;
   final bool isSaving;
   final String? error;
-  final VoidCallback onViewExisting;
+
+  /// Null when the caller isn't allowed to view the matched row (a
+  /// non-approver whose org-scoped RLS doesn't cover someone else's
+  /// invoice) — the button is hidden rather than leading somewhere it
+  /// would just fail to load.
+  final VoidCallback? onViewExisting;
   final VoidCallback onSaveAnyway;
 
   @override
@@ -244,14 +258,16 @@ class _DuplicatePrompt extends StatelessWidget {
           Text(error!, style: TextStyle(color: theme.colorScheme.error)),
           const SizedBox(height: AppSpacing.lg),
         ],
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton(
-            onPressed: isSaving ? null : onViewExisting,
-            child: const Text('View existing invoice'),
+        if (onViewExisting != null) ...[
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              onPressed: isSaving ? null : onViewExisting,
+              child: const Text('View existing invoice'),
+            ),
           ),
-        ),
-        const SizedBox(height: AppSpacing.md),
+          const SizedBox(height: AppSpacing.md),
+        ],
         SizedBox(
           width: double.infinity,
           child: ElevatedButton(

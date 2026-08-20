@@ -10,6 +10,7 @@ class BankTransactionSummary {
     required this.counterpartyName,
     required this.bankName,
     required this.verificationStatus,
+    this.createdBy,
   });
 
   final String id;
@@ -22,6 +23,10 @@ class BankTransactionSummary {
   final String counterpartyName;
   final String bankName;
   final String verificationStatus;
+
+  /// Who scanned this transaction — used by the approval queue to show
+  /// "You" vs. a team member's name. Null unless explicitly selected.
+  final String? createdBy;
 
   factory BankTransactionSummary.fromMap(Map<String, dynamic> map) {
     final dateString = map['transaction_date'] as String?;
@@ -37,6 +42,7 @@ class BankTransactionSummary {
       bankName: map['bank_name'] as String? ?? '',
       verificationStatus:
           map['verification_status'] as String? ?? 'needs_review',
+      createdBy: map['created_by'] as String?,
     );
   }
 }

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fbr_taxvault/core/errors/failure.dart';
+import 'package:fbr_taxvault/features/auth/domain/sign_up_outcome.dart';
 import 'package:fbr_taxvault/features/auth/presentation/auth_providers.dart';
 
 /// Drives sign-in/sign-up/sign-out. `state` is [AsyncLoading] while a
@@ -28,7 +29,30 @@ class AuthController extends AsyncNotifier<void> {
     );
   }
 
-  Future<bool> signUp({
+  Future<bool> signInWithPin({
+    required String phone,
+    required String pin,
+  }) async {
+    state = const AsyncLoading();
+    final result = await ref
+        .read(authRepositoryProvider)
+        .signInWithPin(phone: phone, pin: pin);
+    return result.fold(
+      (_) {
+        state = const AsyncData(null);
+        return true;
+      },
+      (failure) {
+        state = AsyncError(failure, StackTrace.current);
+        return false;
+      },
+    );
+  }
+
+  /// Returns the outcome so the screen can show the right success state
+  /// (signed in vs. "check your email") — null means signUp failed and the
+  /// error is already in `state` for `ref.listen` to pick up.
+  Future<SignUpOutcome?> signUp({
     required String email,
     required String password,
     required String fullName,
@@ -38,13 +62,13 @@ class AuthController extends AsyncNotifier<void> {
         .read(authRepositoryProvider)
         .signUp(email: email, password: password, fullName: fullName);
     return result.fold(
-      (_) {
+      (outcome) {
         state = const AsyncData(null);
-        return true;
+        return outcome;
       },
       (failure) {
         state = AsyncError(failure, StackTrace.current);
-        return false;
+        return null;
       },
     );
   }

@@ -20,14 +20,19 @@ class BankTransactionRepositoryImpl implements BankTransactionRepository {
     String? searchQuery,
     DateTime? periodStart,
     DateTime? periodEnd,
+    String? verificationStatus,
   }) async {
     try {
       var query = _client
           .from('bank_transactions')
           .select(
-            'id, direction, amount, currency, transaction_date, counterparty_name, bank_name, verification_status',
+            'id, direction, amount, currency, transaction_date, counterparty_name, bank_name, verification_status, created_by',
           )
           .eq('organization_id', organizationId);
+
+      if (verificationStatus != null) {
+        query = query.eq('verification_status', verificationStatus);
+      }
 
       if (periodStart != null) {
         query = query.gte('transaction_date', periodStart.toIso8601String());
@@ -67,6 +72,25 @@ class BankTransactionRepositoryImpl implements BankTransactionRepository {
   }
 
   @override
+  Future<Result<int>> countDisputed(String organizationId) async {
+    try {
+      final response = await _client
+          .from('bank_transactions')
+          .select('id')
+          .eq('organization_id', organizationId)
+          .eq('verification_status', 'rejected')
+          .count(CountOption.exact);
+      return Result.ok(response.count);
+    } on SocketException {
+      return const Result.err(NetworkFailure());
+    } on PostgrestException catch (e) {
+      return Result.err(ServerFailure(e.message));
+    } catch (_) {
+      return const Result.err(UnknownFailure());
+    }
+  }
+
+  @override
   Future<Result<BankTransactionDetail>> getDetail(String transactionId) async {
     try {
       final row = await _client
@@ -84,8 +108,10 @@ class BankTransactionRepositoryImpl implements BankTransactionRepository {
     }
   }
 
+  double _round2(double value) => (value * 100).round() / 100;
+
   @override
-  Future<Result<void>> confirmVerification({
+  Future<Result<void>> saveDraftEdits({
     required String transactionId,
     required String direction,
     required double amount,
@@ -97,6 +123,9 @@ class BankTransactionRepositoryImpl implements BankTransactionRepository {
     required String status,
   }) async {
     try {
+      // Deliberately omits verification_status/verified_by/verified_at —
+      // every scan is usable immediately on creation, and only
+      // rejectVerification (admin/owner) moves it away from that.
       await _client
           .from('bank_transactions')
           .update({
@@ -110,9 +139,6 @@ class BankTransactionRepositoryImpl implements BankTransactionRepository {
             'bank_name': bankName,
             'reference_number': referenceNumber,
             'status': status,
-            'verification_status': 'verified',
-            'verified_by': _client.auth.currentUser!.id,
-            'verified_at': DateTime.now().toIso8601String(),
           })
           .eq('id', transactionId);
 
@@ -126,7 +152,28 @@ class BankTransactionRepositoryImpl implements BankTransactionRepository {
     }
   }
 
-  double _round2(double value) => (value * 100).round() / 100;
+  @override
+  Future<Result<void>> rejectVerification({
+    required String transactionId,
+    String? reason,
+  }) async {
+    try {
+      await _client
+          .from('bank_transactions')
+          .update({
+            'verification_status': 'rejected',
+            'rejection_reason': reason?.trim().isEmpty ?? true ? null : reason!.trim(),
+          })
+          .eq('id', transactionId);
+      return const Result.ok(null);
+    } on SocketException {
+      return const Result.err(NetworkFailure());
+    } on PostgrestException catch (e) {
+      return Result.err(ServerFailure(e.message));
+    } catch (_) {
+      return const Result.err(UnknownFailure());
+    }
+  }
 
   @override
   Future<Result<void>> deleteTransaction(String transactionId) async {

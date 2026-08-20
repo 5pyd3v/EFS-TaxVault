@@ -16,7 +16,7 @@ You will be shown one or more images that together make up a single invoice or r
 
 General rules:
 - Prefer the document's own printed subtotal/tax/total over recomputing from a partially-legible item list — printed totals are ground truth when visible.
-- Amounts are numbers, not strings: strip currency symbols, thousands separators, and "Rs."/"PKR" prefixes (e.g. "Rs. 1,200.00" -> 1200.00). Percentages are plain numbers ("17%" -> 17, not 0.17).
+- Amounts are numbers, not strings: strip currency symbols, thousands separators, and "Rs."/"PKR" prefixes (e.g. "Rs. 1,200.00" -> 1200.00, "357,210.50" -> 357210.50). A comma is ALWAYS a thousands separator on these documents, NEVER a decimal point — Pakistani invoices use "." as the decimal separator exclusively. If you see a comma directly followed by exactly two digits and nothing else after it (e.g. "357,21"), that is still a thousands-grouped whole number with a truncated/missing final group, not a decimal fraction — do not reinterpret it as 357.21. Percentages are plain numbers ("17%" -> 17, not 0.17).
 - NTN and STRN should be extracted as printed (digits and dashes only).
 - Do not invent values that are not visibly present on the document — but do not give up early either. A blurry or low-contrast field still deserves your best reading, reported with a correspondingly lower confidence score, rather than being left blank. Blank should mean "not present on the document", not "hard to read."
 - For every top-level field you extract, return a confidence score from 0 to 1 reflecting how certain you are the value is correct and correctly located — lower it for anything blurry, partially cut off, or ambiguous, rather than omitting the field.

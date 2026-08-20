@@ -5,11 +5,13 @@ import 'package:go_router/go_router.dart';
 import 'package:fbr_taxvault/core/constants/app_constants.dart';
 import 'package:fbr_taxvault/core/router/app_routes.dart';
 import 'package:fbr_taxvault/core/theme/app_spacing.dart';
+import 'package:fbr_taxvault/features/auth/presentation/auth_providers.dart';
 import 'package:fbr_taxvault/features/bank_transactions/domain/bank_transaction_detail.dart';
 import 'package:fbr_taxvault/features/bank_transactions/presentation/bank_transaction_providers.dart';
 import 'package:fbr_taxvault/features/documents/presentation/document_viewer_screen.dart';
 import 'package:fbr_taxvault/features/vault/presentation/vault_providers.dart';
 import 'package:fbr_taxvault/shared/providers/invoice_mutation_effects.dart';
+import 'package:fbr_taxvault/shared/utils/amount_parsing.dart';
 import 'package:fbr_taxvault/shared/widgets/app_card.dart';
 import 'package:fbr_taxvault/shared/widgets/async_value_view.dart';
 
@@ -64,17 +66,17 @@ class _BankTransactionReviewScreenState
     super.dispose();
   }
 
-  Future<void> _confirmAndSave() async {
+  Future<void> _saveDraft() async {
     if (!_formKey.currentState!.validate()) return;
 
     HapticFeedback.lightImpact();
     setState(() => _isSaving = true);
     final result = await ref
         .read(bankTransactionRepositoryProvider)
-        .confirmVerification(
+        .saveDraftEdits(
           transactionId: widget.transactionId,
           direction: _direction,
-          amount: double.tryParse(_amount.text) ?? 0,
+          amount: parseAmount(_amount.text),
           transactionDate: _transactionDate.text.trim(),
           counterpartyName: _counterpartyName.text.trim(),
           counterpartyAccount: _counterpartyAccount.text.trim(),
@@ -88,18 +90,133 @@ class _BankTransactionReviewScreenState
 
     result.fold(
       (_) {
-        // Without this, revisiting this transaction would keep showing the
-        // pre-confirm state — the detail provider is a plain (non-
-        // autoDispose) FutureProvider.family, so it caches the response
-        // forever unless explicitly invalidated after a mutation.
         ref.invalidate(bankTransactionDetailProvider(widget.transactionId));
         refreshBankTransactionDependentState(ref);
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
-          ..showSnackBar(const SnackBar(content: Text('Transaction saved.')));
+          ..showSnackBar(const SnackBar(content: Text('Changes saved.')));
         ref.read(selectedVaultViewProvider.notifier).state =
             VaultView.bankTransactions;
         context.go(AppRoutes.vault);
+      },
+      (failure) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(failure.message)));
+      },
+    );
+  }
+
+  Future<void> _confirmDispute() async {
+    final reasonController = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Dispute this transaction?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'The submitter will be notified and can rescan it. You can add a reason (optional).',
+            ),
+            const SizedBox(height: AppSpacing.md),
+            TextField(
+              controller: reasonController,
+              maxLines: 2,
+              decoration: const InputDecoration(labelText: 'Reason (optional)'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: const Text('Dispute'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await _dispute(reasonController.text);
+  }
+
+  Future<void> _dispute(String reason) async {
+    HapticFeedback.lightImpact();
+    setState(() => _isSaving = true);
+    final result = await ref
+        .read(bankTransactionRepositoryProvider)
+        .rejectVerification(
+          transactionId: widget.transactionId,
+          reason: reason,
+        );
+
+    if (!mounted) return;
+    setState(() => _isSaving = false);
+
+    result.fold(
+      (_) {
+        ref.invalidate(bankTransactionDetailProvider(widget.transactionId));
+        refreshBankTransactionDependentState(ref);
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            const SnackBar(content: Text('Transaction disputed.')),
+          );
+        ref.read(selectedVaultViewProvider.notifier).state =
+            VaultView.bankTransactions;
+        context.go(AppRoutes.vault);
+      },
+      (failure) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(failure.message)));
+      },
+    );
+  }
+
+  Future<void> _confirmRescan() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Rescan this transaction?'),
+        content: const Text(
+          'This deletes the current scan so you can capture a fresh photo. This can\'t be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Rescan'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    HapticFeedback.lightImpact();
+    setState(() => _isDeleting = true);
+    final result = await ref
+        .read(bankTransactionRepositoryProvider)
+        .deleteTransaction(widget.transactionId);
+
+    if (!mounted) return;
+    setState(() => _isDeleting = false);
+
+    result.fold(
+      (_) {
+        ref.invalidate(bankTransactionDetailProvider(widget.transactionId));
+        refreshBankTransactionDependentState(ref);
+        context.go(AppRoutes.scan);
       },
       (failure) {
         ScaffoldMessenger.of(context)
@@ -176,47 +293,20 @@ class _BankTransactionReviewScreenState
     if (confirmed == true) await _deleteTransaction();
   }
 
-  Future<bool> _confirmDiscard() async {
-    final discard = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Discard this scan?'),
-        content: const Text(
-          'You haven\'t saved this transaction yet. Discard it, or keep reviewing?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Keep reviewing'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(
-              foregroundColor: Theme.of(context).colorScheme.error,
-            ),
-            child: const Text('Discard'),
-          ),
-        ],
-      ),
-    );
-    return discard ?? false;
-  }
-
   @override
   Widget build(BuildContext context) {
     final detailAsync = ref.watch(
       bankTransactionDetailProvider(widget.transactionId),
     );
-    final isVerified =
-        detailAsync.valueOrNull?.verificationStatus == 'verified';
+    final isApprover = ref.watch(isApproverProvider);
 
+    // A scan is accepted and saved the moment extraction succeeds — there's
+    // no "unconfirmed draft" state left to lose by navigating away, so
+    // unlike the old approve-gated flow, back-press just leaves normally.
+    // Rescan/Dispute/the explicit trash-icon delete are the only ways data
+    // ever goes away now, each requiring its own deliberate confirmation.
     return PopScope(
-      canPop: isVerified || _isDeleting,
-      onPopInvokedWithResult: (didPop, result) async {
-        if (didPop) return;
-        final discard = await _confirmDiscard();
-        if (discard) await _deleteTransaction();
-      },
+      canPop: !_isDeleting,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Review Transaction'),
@@ -251,7 +341,9 @@ class _BankTransactionReviewScreenState
               formKey: _formKey,
               detail: detail,
               direction: _direction,
-              onDirectionChanged: isVerified
+              onDirectionChanged:
+                  detail.verificationStatus == 'rejected' ||
+                      detail.verificationStatus == 'verified'
                   ? null
                   : (value) => setState(() => _direction = value),
               amount: _amount,
@@ -261,8 +353,11 @@ class _BankTransactionReviewScreenState
               bankName: _bankName,
               referenceNumber: _referenceNumber,
               status: _status,
-              isSaving: _isSaving,
-              onConfirm: _confirmAndSave,
+              isSaving: _isSaving || _isDeleting,
+              isApprover: isApprover,
+              onSaveDraft: _saveDraft,
+              onDispute: _confirmDispute,
+              onRescan: _confirmRescan,
             );
           },
         ),
@@ -285,7 +380,10 @@ class _ReviewForm extends StatelessWidget {
     required this.referenceNumber,
     required this.status,
     required this.isSaving,
-    required this.onConfirm,
+    required this.isApprover,
+    required this.onSaveDraft,
+    required this.onDispute,
+    required this.onRescan,
   });
 
   final GlobalKey<FormState> formKey;
@@ -300,13 +398,17 @@ class _ReviewForm extends StatelessWidget {
   final TextEditingController referenceNumber;
   final TextEditingController status;
   final bool isSaving;
-  final VoidCallback onConfirm;
+  final bool isApprover;
+  final VoidCallback onSaveDraft;
+  final VoidCallback onDispute;
+  final VoidCallback onRescan;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isVerified = detail.verificationStatus == 'verified';
-    final enabled = !isVerified;
+    final isRejected = detail.verificationStatus == 'rejected';
+    final enabled = !isVerified && !isRejected;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(
@@ -472,11 +574,70 @@ class _ReviewForm extends StatelessWidget {
                   ],
                 ),
               )
-            else
+            else if (isRejected) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.errorContainer.withValues(
+                    alpha: 0.4,
+                  ),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.cancel_rounded,
+                          color: theme.colorScheme.error,
+                          size: 20,
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        Text(
+                          'This transaction was disputed',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.error,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (detail.rejectionReason?.trim().isNotEmpty ?? false) ...[
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        detail.rejectionReason!,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: isSaving ? null : onRescan,
+                  icon: const Icon(Icons.camera_alt_outlined, size: 18),
+                  label: isSaving
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text('Rescan'),
+                ),
+              ),
+            ] else ...[
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: isSaving ? null : onConfirm,
+                  onPressed: isSaving ? null : onSaveDraft,
                   child: isSaving
                       ? const SizedBox(
                           width: 20,
@@ -486,9 +647,31 @@ class _ReviewForm extends StatelessWidget {
                             color: Colors.white,
                           ),
                         )
-                      : const Text('Confirm & Save'),
+                      : const Text('Save changes'),
                 ),
               ),
+              const SizedBox(height: AppSpacing.md),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: isSaving ? null : onRescan,
+                  icon: const Icon(Icons.camera_alt_outlined, size: 18),
+                  label: const Text('Rescan'),
+                ),
+              ),
+              if (isApprover) ...[
+                const SizedBox(height: AppSpacing.md),
+                Center(
+                  child: TextButton(
+                    onPressed: isSaving ? null : onDispute,
+                    style: TextButton.styleFrom(
+                      foregroundColor: theme.colorScheme.error,
+                    ),
+                    child: const Text('Dispute'),
+                  ),
+                ),
+              ],
+            ],
           ],
         ),
       ),

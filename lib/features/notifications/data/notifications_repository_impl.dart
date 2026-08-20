@@ -96,4 +96,18 @@ class NotificationsRepositoryImpl implements NotificationsRepository {
       return const Result.err(UnknownFailure());
     }
   }
+
+  @override
+  Future<Result<void>> delete(String notificationId) async {
+    try {
+      await _client.from('notifications').delete().eq('id', notificationId);
+      return const Result.ok(null);
+    } on SocketException {
+      return const Result.err(NetworkFailure());
+    } on PostgrestException catch (e) {
+      return Result.err(ServerFailure(e.message));
+    } catch (_) {
+      return const Result.err(UnknownFailure());
+    }
+  }
 }

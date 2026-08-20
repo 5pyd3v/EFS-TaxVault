@@ -21,7 +21,7 @@ export const BANK_TRANSACTION_EXTRACTION_PROMPT =
 
 Fields:
 - direction: "debit" if money left the account holder, "credit" if received.
-- amount: number only, no currency symbol or commas.
+- amount: number only, no currency symbol. Strip commas as thousands separators only — never treat a comma as a decimal point (e.g. "357,210" -> 357210, not 357.21). "." is the only decimal separator on these receipts.
 - currency, bankName, referenceNumber (any transaction/reference/MSGID/STAN), status (as printed).
 - transactionDate: ISO 8601. Include time as HH:mm:ss when shown ("2026-08-06T17:59:00"), else "YYYY-MM-DD". Output ONLY the timestamp — never append notes or explanation to this field.
 

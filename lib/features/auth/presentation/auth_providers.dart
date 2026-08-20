@@ -46,3 +46,17 @@ final currentOrganizationProvider = Provider<Organization?>((ref) {
         orElse: () => null,
       );
 });
+
+/// The current user's role in [currentOrganizationProvider], or null before
+/// that's known.
+final currentUserRoleProvider = Provider<OrganizationRole?>((ref) {
+  return ref.watch(currentOrganizationProvider)?.role;
+});
+
+/// True for an owner/admin — the only roles that can see every org
+/// member's submissions and approve/reject them (see the approval-queue
+/// and team-management features). Everyone else only sees their own work.
+final isApproverProvider = Provider<bool>((ref) {
+  final role = ref.watch(currentUserRoleProvider);
+  return role == OrganizationRole.owner || role == OrganizationRole.admin;
+});

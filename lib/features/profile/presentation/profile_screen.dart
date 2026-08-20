@@ -6,8 +6,10 @@ import 'package:fbr_taxvault/core/router/app_routes.dart';
 import 'package:fbr_taxvault/core/theme/app_gradients.dart';
 import 'package:fbr_taxvault/core/theme/app_spacing.dart';
 import 'package:fbr_taxvault/features/ai_key/presentation/ai_key_providers.dart';
+import 'package:fbr_taxvault/features/auth/domain/organization.dart';
 import 'package:fbr_taxvault/features/auth/presentation/auth_controller.dart';
 import 'package:fbr_taxvault/features/auth/presentation/auth_providers.dart';
+import 'package:fbr_taxvault/features/disputes/presentation/dispute_providers.dart';
 import 'package:fbr_taxvault/features/notifications/presentation/notifications_providers.dart';
 import 'package:fbr_taxvault/shared/widgets/app_card.dart';
 import 'package:fbr_taxvault/shared/widgets/icon_chip.dart';
@@ -27,6 +29,12 @@ class ProfileScreen extends ConsumerWidget {
         ? null
         : ref.watch(geminiKeyStatusProvider(organization.id));
     final keyStatus = keyStatusAsync?.valueOrNull;
+    final isApprover = ref.watch(isApproverProvider);
+    final showTeamManagement =
+        organization?.type == OrganizationType.business && isApprover;
+    final disputedCount = showTeamManagement
+        ? ref.watch(disputedCountProvider).valueOrNull ?? 0
+        : 0;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Profile')),
@@ -119,8 +127,28 @@ class ProfileScreen extends ConsumerWidget {
                 iconColorKey: 'ai_key',
                 title: 'Gemini API Key',
                 subtitle: keyStatus?.statusLabel ?? 'Checking...',
-                onTap: () => context.push(AppRoutes.aiKeySettings),
+                onTap: () => context.push(
+                  isApprover ? AppRoutes.aiKeySettings : AppRoutes.myAiKeySettings,
+                ),
               ),
+              if (showTeamManagement)
+                _SettingsTile(
+                  icon: Icons.groups_outlined,
+                  iconColorKey: 'team',
+                  title: 'Team',
+                  subtitle: 'Add staff and manage access',
+                  onTap: () => context.push(AppRoutes.team),
+                ),
+              if (showTeamManagement)
+                _SettingsTile(
+                  icon: Icons.fact_check_outlined,
+                  iconColorKey: 'disputes',
+                  title: 'Disputes',
+                  subtitle: disputedCount > 0
+                      ? '$disputedCount open'
+                      : 'No open disputes',
+                  onTap: () => context.push(AppRoutes.disputeQueue),
+                ),
             ],
           ),
           const SizedBox(height: AppSpacing.xxl),

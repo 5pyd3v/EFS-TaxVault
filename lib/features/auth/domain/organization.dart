@@ -12,12 +12,18 @@ class Organization {
     required this.name,
     required this.type,
     required this.role,
+    this.isBlocked = false,
   });
 
   final String id;
   final String name;
   final OrganizationType type;
   final OrganizationRole role;
+
+  /// Set by a platform admin (see lib/features/superadmin/) — a blocked
+  /// org's members are signed out and refused sign-in (app_router.dart's
+  /// `_redirect`) until unblocked.
+  final bool isBlocked;
 
   bool get canEditInvoices => role != OrganizationRole.viewer;
 
@@ -27,6 +33,7 @@ class Organization {
       name: map['name'] as String,
       type: OrganizationType.values.byName(map['type'] as String),
       role: OrganizationRole.values.byName(map['role'] as String),
+      isBlocked: map['is_blocked'] as bool? ?? false,
     );
   }
 }

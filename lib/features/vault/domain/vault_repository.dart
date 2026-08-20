@@ -16,5 +16,11 @@ abstract interface class VaultRepository {
     String? searchQuery,
     DateTime? periodStart,
     DateTime? periodEnd,
+    String? verificationStatus,
   });
+
+  /// Org-wide count of disputed invoices — used for the Disputes queue's
+  /// badge, computed separately from [listInvoices] since a badge needs an
+  /// exact count beyond whatever page size the list uses.
+  Future<Result<int>> countDisputed(String organizationId);
 }

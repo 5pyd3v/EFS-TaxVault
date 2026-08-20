@@ -23,6 +23,11 @@ class AppNotification {
   /// deep-link straight into the Review screen from the notification list.
   String? get invoiceId => data['invoice_id'] as String?;
 
+  /// Present when this notification points at a specific bank transaction
+  /// (verification decisions from the approval flow) — same deep-link
+  /// purpose as [invoiceId].
+  String? get transactionId => data['transaction_id'] as String?;
+
   factory AppNotification.fromMap(Map<String, dynamic> map) {
     final readAt = map['read_at'] as String?;
     return AppNotification(

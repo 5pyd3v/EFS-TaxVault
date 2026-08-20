@@ -156,11 +156,23 @@ Deno.serve(async (req) => {
     })
     .eq('id', jobId);
 
+  // Declared outside the try block so the catch handler below knows which
+  // key row (this user's override, or the org default) to flag if Gemini
+  // reports the credential itself as the problem.
+  let keySource: 'user' | 'org' = 'org';
+
   try {
-    const geminiApiKey = await resolveGeminiApiKey(serviceClient, jobId, document.organization_id);
-    if (geminiApiKey instanceof Response) {
-      return geminiApiKey;
+    const keyResult = await resolveGeminiApiKey(
+      serviceClient,
+      jobId,
+      document.organization_id,
+      document.uploaded_by,
+    );
+    if (keyResult instanceof Response) {
+      return keyResult;
     }
+    const { apiKey: geminiApiKey } = keyResult;
+    keySource = keyResult.keySource;
 
     // Prefer the on-device OCR text: roughly 10x cheaper in tokens than the
     // page image and served by Gemini's much faster text path. Only
@@ -354,7 +366,14 @@ Deno.serve(async (req) => {
     return jsonResponse({ invoice_id: invoice.id, warnings: warnings.length, calculation_mismatch: totals.calculationMismatch });
   } catch (error) {
     console.error('extract-invoice failed', error);
-    const keyErrorResponse = await handleGeminiKeyError(serviceClient, jobId, document.organization_id, error);
+    const keyErrorResponse = await handleGeminiKeyError(
+      serviceClient,
+      jobId,
+      document.organization_id,
+      document.uploaded_by,
+      keySource,
+      error,
+    );
     if (keyErrorResponse) return keyErrorResponse;
     await failJob(serviceClient, jobId, error instanceof Error ? error.message : 'Unknown error');
     return jsonResponse({ error: 'Could not process this document. Please try again.' }, 500);

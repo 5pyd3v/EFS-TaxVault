@@ -1,0 +1,15 @@
+-- "Manager" (accountant) and "User" (member) were always permission-
+-- identical — both are non-approvers who see and submit only their own
+-- work (see 0027_org_scoped_row_visibility.sql / 0028_approval_permission_
+-- guard.sql, both of which only ever distinguish owner/admin from
+-- everyone else, never accountant from member specifically). The two-role
+-- choice in the Add Team Member UI was cosmetic, not functional, so it's
+-- removed there — this migration normalizes existing data to match, so a
+-- staff member created before this change also becomes a plain "member"
+-- rather than being the one remaining row still labeled "accountant".
+--
+-- Safe: every RLS/RPC role check that includes 'accountant' already
+-- includes 'member' too (e.g. has_org_role(..., ['owner','admin',
+-- 'accountant','member'])), so no permission actually changes for any
+-- existing row.
+update public.organization_members set role = 'member' where role = 'accountant';

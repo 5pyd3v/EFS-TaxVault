@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:fbr_taxvault/core/router/app_routes.dart';
 import 'package:fbr_taxvault/core/theme/app_spacing.dart';
+import 'package:fbr_taxvault/features/auth/presentation/auth_providers.dart';
 import 'package:fbr_taxvault/features/bank_transactions/domain/bank_transaction_extraction_outcome.dart';
 import 'package:fbr_taxvault/features/bank_transactions/presentation/bank_transaction_providers.dart';
 
@@ -66,6 +67,10 @@ class _BankTransactionProcessingScreenState
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final extraction = ref.watch(_extractionProvider(widget.documentId));
+    // See ProcessingScreen's identical comment: a non-approver can't
+    // necessarily SELECT the matched row if someone else created it, so
+    // "View existing transaction" is only offered to an approver.
+    final isApprover = ref.watch(isApproverProvider);
 
     ref.listen(_extractionProvider(widget.documentId), (previous, next) {
       final outcome = next.valueOrNull;
@@ -94,11 +99,13 @@ class _BankTransactionProcessingScreenState
                   outcome: outcome,
                   isSaving: _isSavingAnyway,
                   error: _saveAnywayError,
-                  onViewExisting: () => context.pushReplacement(
-                    AppRoutes.bankTransactionReview(
-                      outcome.existingTransactionId,
-                    ),
-                  ),
+                  onViewExisting: isApprover
+                      ? () => context.pushReplacement(
+                          AppRoutes.bankTransactionReview(
+                            outcome.existingTransactionId,
+                          ),
+                        )
+                      : null,
                   onSaveAnyway: _saveAnyway,
                 ),
                 BankTransactionExtractionKeyError() => _KeyErrorPrompt(
@@ -187,11 +194,7 @@ class _KeyErrorPrompt extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(
-          Icons.key_off_outlined,
-          size: 40,
-          color: theme.colorScheme.error,
-        ),
+        Icon(Icons.key_off_outlined, size: 40, color: theme.colorScheme.error),
         const SizedBox(height: AppSpacing.xl),
         Text('API key needs attention', style: theme.textTheme.titleMedium),
         const SizedBox(height: AppSpacing.sm),
@@ -232,7 +235,12 @@ class _DuplicatePrompt extends StatelessWidget {
   final BankTransactionExtractionDuplicate outcome;
   final bool isSaving;
   final String? error;
-  final VoidCallback onViewExisting;
+
+  /// Null when the caller isn't allowed to view the matched row (a
+  /// non-approver whose org-scoped RLS doesn't cover someone else's
+  /// transaction) — the button is hidden rather than leading somewhere it
+  /// would just fail to load.
+  final VoidCallback? onViewExisting;
   final VoidCallback onSaveAnyway;
 
   @override
@@ -264,14 +272,16 @@ class _DuplicatePrompt extends StatelessWidget {
           Text(error!, style: TextStyle(color: theme.colorScheme.error)),
           const SizedBox(height: AppSpacing.lg),
         ],
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton(
-            onPressed: isSaving ? null : onViewExisting,
-            child: const Text('View existing transaction'),
+        if (onViewExisting != null) ...[
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              onPressed: isSaving ? null : onViewExisting,
+              child: const Text('View existing transaction'),
+            ),
           ),
-        ),
-        const SizedBox(height: AppSpacing.md),
+          const SizedBox(height: AppSpacing.md),
+        ],
         SizedBox(
           width: double.infinity,
           child: ElevatedButton(

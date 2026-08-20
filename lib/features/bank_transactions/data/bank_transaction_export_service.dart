@@ -68,6 +68,11 @@ class BankTransactionExportService {
             'counterparty_account, bank_name, reference_number, status, verification_status',
           )
           .eq('organization_id', organizationId)
+          // Disputed rows are excluded here the same way get_bank_transaction_
+          // period/counterparty_summaries already exclude them (0031) — a
+          // dispute means the submitter still needs to rescan it, so it isn't
+          // settled data yet and shouldn't appear in a filing-ready export.
+          .neq('verification_status', 'rejected')
           .order('transaction_date', ascending: false)
           .range(offset, offset + pageSize - 1);
       final page = (rows as List).cast<Map<String, dynamic>>();

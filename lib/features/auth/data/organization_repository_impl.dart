@@ -14,9 +14,23 @@ class OrganizationRepositoryImpl implements OrganizationRepository {
   @override
   Future<Result<List<Organization>>> getMyOrganizations() async {
     try {
+      // Explicit user_id filter is required here, not optional: the RLS
+      // policy on organization_members (org_members_select_member) scopes
+      // by ORG MEMBERSHIP, not by row ownership — intentionally, so the
+      // Team screen can list every member's row. Without this filter, an
+      // owner/admin whose org has other members (business orgs with staff)
+      // gets back everyone's rows here too, and this method would return
+      // duplicate entries for the same organization with different roles —
+      // "my organizations" silently became "everyone's membership rows I'm
+      // allowed to see." This was invisible until an org had more than one
+      // member, since every org previously had exactly one (its owner).
+      final userId = _client.auth.currentUser?.id;
+      if (userId == null) return const Result.ok([]);
+
       final rows = await _client
           .from('organization_members')
-          .select('role, organizations(id, name, type)')
+          .select('role, organizations(id, name, type, is_blocked)')
+          .eq('user_id', userId)
           .order('created_at');
 
       final organizations = rows.map((row) {
@@ -26,6 +40,7 @@ class OrganizationRepositoryImpl implements OrganizationRepository {
           'name': org['name'],
           'type': org['type'],
           'role': row['role'],
+          'is_blocked': org['is_blocked'],
         });
       }).toList();
 
